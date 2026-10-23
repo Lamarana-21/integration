@@ -1,88 +1,611 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
+import React, { useState, useEffect } from 'react';
+import { Navbar } from '@/components/Navbar';
+import { OffresPubliquesView } from '@/components/screens/OffresPubliquesView';
+import { AuthModal } from '@/components/screens/AuthModal';
+import { PostulerModal } from '@/components/screens/PostulerModal';
+import { MesCandidaturesView } from '@/components/screens/MesCandidaturesView';
+import { ProfilCandidatView } from '@/components/screens/ProfilCandidatView';
+import { DashboardRecruteurView } from '@/components/screens/DashboardRecruteurView';
+import { NouvelleOffreView } from '@/components/screens/NouvelleOffreView';
+import { CandidaturesOffreView } from '@/components/screens/CandidaturesOffreView';
+import { FicheCandidatIaView } from '@/components/screens/FicheCandidatIaView';
+import { FicheEntrepriseView } from '@/components/screens/FicheEntrepriseView';
+import { AdminUsersView } from '@/components/screens/AdminUsersView';
+import { AdminRolesView } from '@/components/screens/AdminRolesView';
+import { AdminEntreprisesView } from '@/components/screens/AdminEntreprisesView';
+import { AdminNotificationsView } from '@/components/screens/AdminNotificationsView';
 import {
-  Bell,
-  BriefcaseBusiness,
-  Building2,
-  CheckCircle2,
-  ChevronDown,
-  FileText,
-  Home,
-  LayoutDashboard,
-  Menu,
-  MoreHorizontal,
-  Search,
-  Settings,
-  Sparkles,
-  Users,
-  X,
-} from 'lucide-react'
+  ApplicationStatus,
+  Candidat,
+  Candidature,
+  Entreprise,
+  NotificationRecord,
+  Offre,
+  RoleName,
+  User,
+} from '@/lib/types';
+import {
+  INITIAL_CANDIDATS,
+  INITIAL_CANDIDATURES,
+  INITIAL_COMPANIES,
+  INITIAL_CVS,
+  INITIAL_NOTIFICATIONS,
+  INITIAL_OFFRES,
+  INITIAL_PERMISSIONS,
+  INITIAL_ROLES,
+  INITIAL_USERS,
+} from '@/lib/initialData';
+import { api } from '@/lib/api';
 
-const offers = [
-  { title: 'Développeur Full Stack', company: 'TechNova Solutions', place: 'Paris · Hybride', type: 'CDI', applications: 48, status: 'Publiée', color: 'violet' },
-  { title: 'Product Designer', company: 'Studio Horizon', place: 'Lyon · Présentiel', type: 'CDI', applications: 32, status: 'Publiée', color: 'blue' },
-  { title: 'Data Analyst Junior', company: 'Finora', place: 'Paris · Hybride', type: 'Stage', applications: 19, status: 'Brouillon', color: 'amber' },
-]
+export default function AppRoot() {
+  // Application State
+  const [currentRole, setCurrentRole] = useState<RoleName>('RECRUTEUR');
+  const [currentUser, setCurrentUser] = useState<User | null>(INITIAL_USERS[1]); // Recruteur Alpha par défaut
+  const [activeScreen, setActiveScreen] = useState<string>('E7'); // E7 Dashboard Recruteur par défaut
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(false);
 
-const candidates = [
-  { name: 'Sophie Martin', role: 'Développeuse Full Stack', score: 94, status: 'Présélectionnée', initials: 'SM', tone: 'peach' },
-  { name: 'Lucas Bernard', role: 'Développeur Full Stack', score: 87, status: 'En cours d’examen', initials: 'LB', tone: 'blue' },
-  { name: 'Emma Petit', role: 'Product Designer', score: 81, status: 'Entretien', initials: 'EP', tone: 'green' },
-]
+  // Entities Data Store
+  const [offres, setOffres] = useState<Offre[]>(INITIAL_OFFRES);
+  const [candidatures, setCandidatures] = useState<Candidature[]>(INITIAL_CANDIDATURES);
+  const [entreprises, setEntreprises] = useState<Entreprise[]>(INITIAL_COMPANIES);
+  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
+  const [roles, setRoles] = useState(INITIAL_ROLES);
+  const [allPermissions] = useState(INITIAL_PERMISSIONS);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>(INITIAL_NOTIFICATIONS);
 
-const nav = [
-  { label: 'Vue d’ensemble', icon: LayoutDashboard },
-  { label: 'Offres d’emploi', icon: BriefcaseBusiness, count: '12' },
-  { label: 'Candidatures', icon: FileText, count: '86' },
-  { label: 'Candidats', icon: Users },
-  { label: 'Entreprises', icon: Building2 },
-]
+  // Active items for detail views
+  const [selectedOffreForDetail, setSelectedOffreForDetail] = useState<Offre | null>(null);
+  const [selectedCandidatureForDetail, setSelectedCandidatureForDetail] = useState<Candidature | null>(
+    INITIAL_CANDIDATURES[0]
+  );
+  const [editingOffre, setEditingOffre] = useState<Offre | null>(null);
 
-export default function Page() {
-  const [active, setActive] = useState('Vue d’ensemble')
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [showNotice, setShowNotice] = useState(true)
+  // Modals
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login');
+  const [postulerModalOpen, setPostulerModalOpen] = useState(false);
+  const [postulerOffreTarget, setPostulerOffreTarget] = useState<Offre | null>(null);
+
+  // Check Laravel Backend Health on mount
+  useEffect(() => {
+    api.checkBackendHealth().then((isOnline) => {
+      setBackendOnline(isOnline);
+    });
+  }, []);
+
+  // Handle Actor Role Switch
+  const handleRoleChange = (role: RoleName) => {
+    setCurrentRole(role);
+    if (role === 'VISITEUR') {
+      setCurrentUser(null);
+      setActiveScreen('E1');
+    } else if (role === 'CANDIDAT') {
+      setCurrentUser(INITIAL_USERS[3]); // Amina
+      setActiveScreen('E1');
+    } else if (role === 'RECRUTEUR') {
+      setCurrentUser(INITIAL_USERS[1]); // R. Ben Ali
+      setActiveScreen('E7');
+    } else if (role === 'ADMIN') {
+      setCurrentUser(INITIAL_USERS[0]); // Amélie
+      setActiveScreen('E12');
+    }
+  };
+
+  // Open Apply Modal (E4)
+  const handleOpenPostuler = (offre: Offre) => {
+    if (currentRole === 'VISITEUR') {
+      setAuthModalTab('login');
+      setAuthModalOpen(true);
+      return;
+    }
+    setPostulerOffreTarget(offre);
+    setPostulerModalOpen(true);
+  };
+
+  // Submit Application (Parcours B: Dépôt candidature)
+  const handleApplicationSubmit = ({
+    offreId,
+    cvId,
+    lettre,
+    message,
+  }: {
+    offreId: string;
+    cvId: string;
+    lettre: string;
+    message: string;
+  }) => {
+    const targetOffre = offres.find((o) => o.id === offreId);
+    const newCand: Candidature = {
+      id: `app-${Date.now()}`,
+      candidat_id: INITIAL_CANDIDATS[0].id,
+      candidat: INITIAL_CANDIDATS[0],
+      offre_id: offreId,
+      offre: targetOffre,
+      cv_id: cvId,
+      cv: INITIAL_CVS[0],
+      lettre_motivation: lettre,
+      message,
+      statut: 'RECUE',
+      created_at: new Date().toISOString().split('T')[0],
+      analyse: {
+        id: `ai-${Date.now()}`,
+        cv_id: cvId,
+        infos_extraites: {
+          competences: ['React', 'Node.js', 'SQL', 'Git', 'TypeScript'],
+          experiences: INITIAL_CANDIDATS[0].experiences,
+          formations: INITIAL_CANDIDATS[0].formations,
+          langues: INITIAL_CANDIDATS[0].langues,
+        },
+        resume: `Développeuse web en adéquation avec les attentes du poste « ${targetOffre?.titre} ». Solide base technique.`,
+        score_correspondance: 84,
+        points_forts: ['Stack technique React/Node.js en phase', 'Expérience démontrée'],
+        points_manquants: ['Tests automatisés à approfondir'],
+        niveau_confiance: 'MOYEN',
+        version_modele: 'Talenta-AI-v2.1',
+        valide_par_recruteur: false,
+      },
+      notes_internes: [],
+    };
+
+    setCandidatures([newCand, ...candidatures]);
+
+    // Notification logs (Module 11.1 & 11.3)
+    const newNotif1: NotificationRecord = {
+      id: `notif-${Date.now()}-1`,
+      utilisateur_id: INITIAL_USERS[3].id,
+      user: INITIAL_USERS[3],
+      type: 'CONFIRMATION_DEPOT',
+      objet: `Confirmation de votre candidature : ${targetOffre?.titre}`,
+      message: `Votre candidature pour le poste « ${targetOffre?.titre} » a bien été enregistrée.`,
+      statut_envoi: 'ENVOYE',
+      created_at: 'À l’instant',
+    };
+    const newNotif2: NotificationRecord = {
+      id: `notif-${Date.now()}-2`,
+      utilisateur_id: INITIAL_USERS[1].id,
+      user: INITIAL_USERS[1],
+      type: 'NOUVELLE_CANDIDATURE',
+      objet: `Nouvelle candidature pour : ${targetOffre?.titre}`,
+      message: `Amina Ben Salem a postulé. L'analyse IA est disponible.`,
+      statut_envoi: 'ENVOYE',
+      created_at: 'À l’instant',
+    };
+    setNotifications([newNotif1, newNotif2, ...notifications]);
+  };
+
+  // Withdraw Application (RM5)
+  const handleWithdrawApplication = (candId: string) => {
+    setCandidatures((prev) =>
+      prev.map((c) => (c.id === candId ? { ...c, statut: 'RETIREE' } : c))
+    );
+  };
+
+  // Recruiter Updates Status (Parcours C & RM4)
+  const handleUpdateStatus = (
+    candId: string,
+    newStatus: ApplicationStatus,
+    commentaire?: string
+  ) => {
+    setCandidatures((prev) =>
+      prev.map((c) => {
+        if (c.id === candId) {
+          return {
+            ...c,
+            statut: newStatus,
+            commentaire_recruteur: commentaire || c.commentaire_recruteur,
+          };
+        }
+        return c;
+      })
+    );
+
+    if (selectedCandidatureForDetail?.id === candId) {
+      setSelectedCandidatureForDetail((prev) =>
+        prev ? { ...prev, statut: newStatus } : null
+      );
+    }
+
+    // Module 11.2 Notification
+    const notif: NotificationRecord = {
+      id: `notif-${Date.now()}`,
+      utilisateur_id: INITIAL_USERS[3].id,
+      user: INITIAL_USERS[3],
+      type: 'CHANGEMENT_STATUT',
+      objet: 'Mise à jour du statut de votre candidature',
+      message: `Votre candidature est passée au statut : ${newStatus}`,
+      statut_envoi: 'ENVOYE',
+      created_at: 'À l’instant',
+    };
+    setNotifications([notif, ...notifications]);
+  };
+
+  // Recruiter Adds Internal Note (Module 8.4)
+  const handleAddNote = (candId: string, contenu: string, etiquettes: string[]) => {
+    const newNote = {
+      id: `note-${Date.now()}`,
+      auteur_id: currentUser?.id || 'u-rec-alpha',
+      auteur: currentUser || INITIAL_USERS[1],
+      candidature_id: candId,
+      contenu,
+      etiquettes,
+      created_at: 'À l’instant',
+    };
+
+    setCandidatures((prev) =>
+      prev.map((c) => {
+        if (c.id === candId) {
+          return {
+            ...c,
+            notes_internes: [...(c.notes_internes || []), newNote],
+          };
+        }
+        return c;
+      })
+    );
+
+    if (selectedCandidatureForDetail?.id === candId) {
+      setSelectedCandidatureForDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              notes_internes: [...(prev.notes_internes || []), newNote],
+            }
+          : null
+      );
+    }
+  };
+
+  // Recruiter Reruns AI Analysis (Module 9.7)
+  const handleRerunAi = (candId: string) => {
+    setCandidatures((prev) =>
+      prev.map((c) => {
+        if (c.id === candId && c.analyse) {
+          return {
+            ...c,
+            analyse: {
+              ...c.analyse,
+              score_correspondance: Math.min(95, c.analyse.score_correspondance + 2),
+              niveau_confiance: 'ELEVE',
+              valide_par_recruteur: true,
+            },
+          };
+        }
+        return c;
+      })
+    );
+  };
+
+  // Publish / Save Job Offer (Parcours A)
+  const handleSaveJob = (jobData: Partial<Offre>, publishImmediately: boolean) => {
+    if (editingOffre) {
+      // Update
+      setOffres((prev) =>
+        prev.map((o) => (o.id === editingOffre.id ? { ...o, ...jobData } : o))
+      );
+      setEditingOffre(null);
+    } else {
+      // Create new
+      const newJob: Offre = {
+        id: `job-${Date.now()}`,
+        titre: jobData.titre || 'Nouvelle offre',
+        description: jobData.description || '',
+        missions: jobData.missions || '',
+        competences_requises: jobData.competences_requises || ['React', 'Node.js'],
+        type_contrat: jobData.type_contrat || 'CDI',
+        lieu: jobData.lieu || 'Sfax',
+        salaire: jobData.salaire || '',
+        date_publication: publishImmediately ? new Date().toISOString().split('T')[0] : '',
+        date_limite: jobData.date_limite || '2026-11-30',
+        statut: publishImmediately ? 'PUBLIEE' : 'BROUILLON',
+        entreprise_id: 'c-alpha',
+        entreprise: INITIAL_COMPANIES[0],
+        auteur_id: currentUser?.id || 'u-rec-alpha',
+        auteur: currentUser || INITIAL_USERS[1],
+        candidatures_count: 0,
+        created_at: new Date().toISOString().split('T')[0],
+      };
+      setOffres([newJob, ...offres]);
+    }
+    setActiveScreen('E7'); // Return to Recruiter Dashboard
+  };
+
+  // Close Job Offer (RM6)
+  const handleCloseJob = (jobId: string) => {
+    setOffres((prev) =>
+      prev.map((o) => (o.id === jobId ? { ...o, statut: 'CLOTUREE' } : o))
+    );
+  };
+
+  // Candidate applications IDs for RM2 check
+  const candidateApplicationOfferIds = candidatures
+    .filter((c) => c.candidat_id === INITIAL_CANDIDATS[0].id)
+    .map((c) => c.offre_id);
 
   return (
-    <main className="min-h-screen bg-[#f7f8fc] text-[#172033]">
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-[252px] flex-col border-r border-[#e9ebf2] bg-white lg:flex">
-        <div className="flex h-[86px] items-center gap-3 border-b border-[#eef0f5] px-7">
-          <div className="grid size-9 place-items-center rounded-xl bg-[#6458e8] text-white shadow-[0_6px_16px_rgba(100,88,232,.28)]"><Sparkles size={19} /></div>
-          <div><div className="text-[17px] font-bold tracking-tight">Talenta</div><div className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#9ba2b6]">Recruitment OS</div></div>
-        </div>
-        <div className="flex flex-1 flex-col px-4 py-7">
-          <div className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[.15em] text-[#a5abbd]">Menu principal</div>
-          <nav className="flex flex-col gap-1">
-            {nav.map(({ label, icon: Icon, count }) => <button key={label} onClick={() => setActive(label)} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left text-[13px] font-semibold transition ${active === label ? 'bg-[#f0efff] text-[#5a4de0]' : 'text-[#71798e] hover:bg-[#f7f8fc]'}`}><Icon size={17} strokeWidth={active === label ? 2.4 : 2} /><span className="flex-1">{label}</span>{count && <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${active === label ? 'bg-white text-[#5a4de0]' : 'bg-[#f1f2f6] text-[#9ba2b6]'}`}>{count}</span>}</button>)}
-          </nav>
-          <div className="mb-3 mt-10 px-3 text-[10px] font-bold uppercase tracking-[.15em] text-[#a5abbd]">Configuration</div>
-          <button onClick={() => setActive('Paramètres')} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left text-[13px] font-semibold ${active === 'Paramètres' ? 'bg-[#f0efff] text-[#5a4de0]' : 'text-[#71798e]'}`}><Settings size={17} /><span>Paramètres</span></button>
-          <div className="mt-auto rounded-2xl bg-[#f5f4ff] p-4"><div className="mb-2 grid size-8 place-items-center rounded-lg bg-[#e5e2ff] text-[#6155e2]"><Sparkles size={16} /></div><div className="text-[12px] font-bold">Analyse IA active</div><p className="mt-1 text-[11px] leading-4 text-[#8389a0]">L’assistant vous aide à identifier les meilleurs profils.</p><button className="mt-3 text-[11px] font-bold text-[#5a4de0]">En savoir plus →</button></div>
-        </div>
-        <div className="border-t border-[#eef0f5] p-4"><div className="flex items-center gap-3"><div className="grid size-9 place-items-center rounded-full bg-[#dce7fb] text-[12px] font-bold text-[#4165a3]">AM</div><div className="min-w-0 flex-1"><div className="truncate text-[12px] font-bold">Amélie Moreau</div><div className="text-[10px] text-[#969db0]">Administratrice</div></div><ChevronDown size={15} className="text-[#a5abbd]" /></div></div>
-      </aside>
+    <div className="min-h-screen bg-[#f7f8fc] text-[#172033] flex flex-col font-sans">
+      {/* Navbar with role switcher & Section 5.4 navigation */}
+      <Navbar
+        currentRole={currentRole}
+        onRoleChange={handleRoleChange}
+        activeScreen={activeScreen}
+        onNavigate={setActiveScreen}
+        currentUser={currentUser}
+        onOpenAuth={(tab) => {
+          setAuthModalTab(tab);
+          setAuthModalOpen(true);
+        }}
+        onLogout={() => handleRoleChange('VISITEUR')}
+        backendOnline={backendOnline}
+      />
 
-      <section className="lg:pl-[252px]">
-        <header className="flex h-[86px] items-center justify-between border-b border-[#e9ebf2] bg-white px-5 sm:px-9">
-          <button className="mr-3 lg:hidden" onClick={() => setMenuOpen(!menuOpen)} aria-label="Ouvrir le menu">{menuOpen ? <X /> : <Menu />}</button>
-          <div className="relative hidden w-[300px] md:block"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#a5abbd]" /><input aria-label="Rechercher" placeholder="Rechercher une offre, un candidat..." className="h-10 w-full rounded-xl border border-[#eceef4] bg-[#fafbfc] pl-10 pr-3 text-[12px] outline-none placeholder:text-[#a5abbd] focus:border-[#b9b4f5]" /></div>
-          <div className="flex items-center gap-4"><button className="relative grid size-9 place-items-center rounded-xl border border-[#eceef4] text-[#737b90] hover:bg-[#fafbfc]" aria-label="Notifications"><Bell size={17} /><span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-[#e76f70]" /></button><div className="hidden h-7 w-px bg-[#eceef4] sm:block" /><button className="flex items-center gap-2" onClick={() => setActive('Profil')}><div className="grid size-9 place-items-center rounded-full bg-[#dce7fb] text-[12px] font-bold text-[#4165a3]">AM</div><span className="hidden text-[12px] font-bold sm:block">Amélie Moreau</span><ChevronDown size={14} className="text-[#9ba2b6]" /></button></div>
-        </header>
-        {menuOpen && <div className="border-b border-[#e9ebf2] bg-white p-4 lg:hidden">{nav.map(({ label, icon: Icon }) => <button key={label} onClick={() => { setActive(label); setMenuOpen(false) }} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold text-[#71798e]"><Icon size={17} />{label}</button>)}</div>}
+      {/* Main Screen Router according to Section 5 Aperçu des interfaces */}
+      <main className="flex-1 pb-16">
+        {/* E1 / E3 : Offres Publiques & Recherche / Détail Offre */}
+        {(activeScreen === 'E1' || activeScreen === 'E3') && (
+          <OffresPubliquesView
+            offres={offres}
+            onSelectOffre={(o) => {
+              setSelectedOffreForDetail(o);
+              setActiveScreen('E3');
+            }}
+            onPostuler={handleOpenPostuler}
+            currentRole={currentRole}
+            currentUser={currentUser}
+            candidatureOffreIds={candidateApplicationOfferIds}
+          />
+        )}
 
-        <div className="mx-auto max-w-[1370px] p-5 sm:p-9">
-          <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="mb-2 text-[11px] font-bold uppercase tracking-[.15em] text-[#8e96aa]">Mercredi 23 octobre 2026</div><h1 className="text-[29px] font-bold tracking-[-.04em] sm:text-[34px]">Bonjour Amélie <Sparkles size={22} className="ml-1 inline text-[#6458e8]" aria-hidden="true" /></h1><p className="mt-1 text-[13px] text-[#858da1]">Voici ce qui se passe sur votre espace recrutement.</p></div><button className="flex w-fit items-center gap-2 rounded-xl bg-[#6458e8] px-4 py-3 text-[12px] font-bold text-white shadow-[0_7px_16px_rgba(100,88,232,.22)] hover:bg-[#5549d2]"><span className="text-lg leading-none">+</span> Créer une offre</button></div>
-          {showNotice && <div className="mb-7 flex items-start gap-3 rounded-2xl border border-[#ddd9ff] bg-[#f3f2ff] p-4"><div className="grid size-8 shrink-0 place-items-center rounded-lg bg-white text-[#6458e8]"><Sparkles size={16} /></div><div className="flex-1"><div className="text-[12px] font-bold text-[#5145c6]">Votre assistant IA est prêt</div><p className="mt-1 text-[11px] text-[#777395]">3 nouveaux CV ont été analysés et classés selon vos offres actives.</p></div><button onClick={() => setShowNotice(false)} className="text-[#9691c4]" aria-label="Fermer la notification"><X size={16} /></button></div>}
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Stat icon={BriefcaseBusiness} label="Offres actives" value="12" trend="+2 ce mois" /><Stat icon={FileText} label="Candidatures reçues" value="86" trend="+18% vs. mois dernier" /><Stat icon={Users} label="Candidats en cours" value="34" trend="+6 cette semaine" /><Stat icon={CheckCircle2} label="Postes pourvus" value="8" trend="+3 ce mois" /></div>
-          <div className="mt-7 grid gap-6 xl:grid-cols-[1.25fr_.75fr]"><section className="rounded-2xl border border-[#e9ebf2] bg-white p-5 sm:p-6"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-[15px] font-bold">Activité des candidatures</h2><p className="mt-1 text-[11px] text-[#979eb0]">Candidatures reçues sur les 6 derniers mois</p></div><button className="rounded-lg border border-[#eceef4] px-3 py-2 text-[11px] font-semibold text-[#737b90]">6 derniers mois <ChevronDown size={13} className="ml-2 inline" /></button></div><div className="relative h-[190px] pt-4"><div className="absolute inset-x-0 top-5 flex flex-col justify-between text-[10px] text-[#b0b5c3]"><span className="border-b border-dashed border-[#eef0f4] pb-8">40</span><span className="border-b border-dashed border-[#eef0f4] pb-8">30</span><span className="border-b border-dashed border-[#eef0f4] pb-8">20</span><span className="border-b border-dashed border-[#eef0f4] pb-8">10</span><span>0</span></div><div className="absolute bottom-5 left-8 right-0 flex h-[142px] items-end justify-around gap-3"><Bar month="Mai" value="42%" /><Bar month="Juin" value="60%" /><Bar month="Juil." value="46%" /><Bar month="Août" value="76%" active /><Bar month="Sept." value="66%" /><Bar month="Oct." value="88%" /></div></div></section><section className="rounded-2xl border border-[#e9ebf2] bg-white p-5 sm:p-6"><div className="mb-5 flex items-start justify-between"><div><h2 className="text-[15px] font-bold">Répartition des statuts</h2><p className="mt-1 text-[11px] text-[#979eb0]">Sur l’ensemble des candidatures</p></div><button className="text-[#a5abbd]" aria-label="Plus d'options"><MoreHorizontal size={18} /></button></div><div className="flex items-center gap-6"><div className="relative grid size-[134px] shrink-0 place-items-center rounded-full" style={{ background: 'conic-gradient(#6458e8 0 42%, #8ba7e8 42% 68%, #f5c46d 68% 84%, #e8eaf0 84% 100%)' }}><div className="grid size-[92px] place-items-center rounded-full bg-white"><span className="text-[25px] font-bold">86</span><span className="text-[10px] text-[#9ba2b6]">Total</span></div></div><div className="flex flex-col gap-3 text-[11px] text-[#737b90]"><Legend color="bg-[#6458e8]" label="En cours" value="36" /><Legend color="bg-[#8ba7e8]" label="Présélectionnées" value="22" /><Legend color="bg-[#f5c46d]" label="Entretiens" value="14" /><Legend color="bg-[#e8eaf0]" label="Autres" value="14" /></div></div></section></div>
-          <div className="mt-7 grid gap-6 xl:grid-cols-[1.25fr_.75fr]"><section className="rounded-2xl border border-[#e9ebf2] bg-white p-5 sm:p-6"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-[15px] font-bold">Offres récentes</h2><p className="mt-1 text-[11px] text-[#979eb0]">Les dernières offres publiées ou modifiées</p></div><button className="text-[11px] font-bold text-[#6458e8]">Voir toutes les offres →</button></div><div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-[11px]"><thead className="border-b border-[#eef0f5] text-[10px] font-bold uppercase tracking-wider text-[#a5abbd]"><tr><th className="pb-3 font-bold">Offre</th><th className="pb-3 font-bold">Candidatures</th><th className="pb-3 font-bold">Statut</th><th className="pb-3 font-bold"></th></tr></thead><tbody>{offers.map((offer) => <tr key={offer.title} className="border-b border-[#f2f3f6] last:border-0"><td className="py-4"><div className="flex items-center gap-3"><div className={`grid size-8 rounded-lg place-items-center ${offer.color === 'violet' ? 'bg-[#eeecff] text-[#6458e8]' : offer.color === 'blue' ? 'bg-[#e8f0ff] text-[#5680d5]' : 'bg-[#fff3db] text-[#d29b39]'}`}><BriefcaseBusiness size={14} /></div><div><div className="font-bold">{offer.title}</div><div className="mt-0.5 text-[10px] text-[#999fb0]">{offer.company} · {offer.place}</div></div></div></td><td className="font-semibold text-[#4d566d]">{offer.applications} <span className="font-normal text-[#a5abbd]">candidatures</span></td><td><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${offer.status === 'Publiée' ? 'bg-[#eaf8f1] text-[#36a36b]' : 'bg-[#fff5df] text-[#c18a25]'}`}>{offer.status}</span></td><td><button className="text-[#a5abbd]" aria-label={`Options ${offer.title}`}><MoreHorizontal size={17} /></button></td></tr>)}</tbody></table></div></section><section className="rounded-2xl border border-[#e9ebf2] bg-white p-5 sm:p-6"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-[15px] font-bold">Candidats à traiter</h2><p className="mt-1 text-[11px] text-[#979eb0]">Priorisés par l’analyse IA</p></div><button className="text-[11px] font-bold text-[#6458e8]">Voir tout →</button></div><div className="flex flex-col gap-4">{candidates.map((candidate) => <div key={candidate.name} className="flex items-center gap-3"><div className={`grid size-9 shrink-0 place-items-center rounded-full text-[10px] font-bold ${candidate.tone === 'peach' ? 'bg-[#ffe7dc] text-[#b8795e]' : candidate.tone === 'blue' ? 'bg-[#dce7fb] text-[#4165a3]' : 'bg-[#dcf3e8] text-[#3e9870]'}`}>{candidate.initials}</div><div className="min-w-0 flex-1"><div className="truncate text-[11px] font-bold">{candidate.name}</div><div className="truncate text-[10px] text-[#969db0]">{candidate.role}</div></div><div className="text-right"><div className="text-[12px] font-bold text-[#6458e8]">{candidate.score}%</div><div className="text-[9px] text-[#a5abbd]">match IA</div></div></div>)}</div><button className="mt-5 w-full rounded-xl border border-[#e5e2ff] py-2.5 text-[11px] font-bold text-[#6458e8] hover:bg-[#f7f6ff]">Consulter les recommandations</button></section></div>
+        {/* E5 : Mes Candidatures (Espace Candidat) */}
+        {activeScreen === 'E5' && (
+          <MesCandidaturesView
+            candidatures={candidatures.filter(
+              (c) => c.candidat_id === INITIAL_CANDIDATS[0].id
+            )}
+            onWithdrawApplication={handleWithdrawApplication}
+            onViewJobDetail={(o) => {
+              setSelectedOffreForDetail(o);
+              setActiveScreen('E3');
+            }}
+          />
+        )}
+
+        {/* E6 : Profil Candidat */}
+        {activeScreen === 'E6' && (
+          <ProfilCandidatView
+            candidat={INITIAL_CANDIDATS[0]}
+            onUpdateProfile={(updated) => alert('Profil mis à jour avec succès !')}
+            onDeleteMyData={() => {
+              alert('Vos données ont été supprimées conformément au RGPD.');
+              handleRoleChange('VISITEUR');
+            }}
+          />
+        )}
+
+        {/* E7 : Tableau de Bord Recruteur */}
+        {activeScreen === 'E7' && (
+          <DashboardRecruteurView
+            offres={offres}
+            candidatures={candidatures}
+            onOpenNewJob={() => {
+              setEditingOffre(null);
+              setActiveScreen('E8');
+            }}
+            onOpenApplicationDetail={(cand) => {
+              setSelectedCandidatureForDetail(cand);
+              setActiveScreen('E10');
+            }}
+            onViewAllApplications={() => setActiveScreen('E9')}
+            onEditJob={(job) => {
+              setEditingOffre(job);
+              setActiveScreen('E8');
+            }}
+            onCloseJob={handleCloseJob}
+          />
+        )}
+
+        {/* E8 : Création et Édition d'Offre */}
+        {activeScreen === 'E8' && (
+          <NouvelleOffreView
+            initialOffre={editingOffre}
+            onSave={handleSaveJob}
+            onCancel={() => setActiveScreen('E7')}
+          />
+        )}
+
+        {/* E9 : Candidatures Reçues pour une Offre */}
+        {activeScreen === 'E9' && (
+          <CandidaturesOffreView
+            offres={offres}
+            candidatures={candidatures}
+            onOpenDetail={(cand) => {
+              setSelectedCandidatureForDetail(cand);
+              setActiveScreen('E10');
+            }}
+            onBulkUpdateStatus={(ids, newStatus) => {
+              ids.forEach((id) => handleUpdateStatus(id, newStatus));
+            }}
+          />
+        )}
+
+        {/* E10 : Fiche Candidat & Analyse IA */}
+        {activeScreen === 'E10' && selectedCandidatureForDetail && (
+          <FicheCandidatIaView
+            candidature={selectedCandidatureForDetail}
+            onBack={() => setActiveScreen('E9')}
+            onUpdateStatus={handleUpdateStatus}
+            onAddNote={handleAddNote}
+            onRerunAi={handleRerunAi}
+          />
+        )}
+
+        {/* E11 : Fiche Entreprise */}
+        {activeScreen === 'E11' && (
+          <FicheEntrepriseView
+            entreprise={entreprises[0]}
+            offres={offres}
+            recruteurs={[INITIAL_USERS[1]]}
+            onUpdateEntreprise={(data) => {
+              setEntreprises((prev) =>
+                prev.map((e) => (e.id === entreprises[0].id ? { ...e, ...data } : e))
+              );
+            }}
+            onSelectOffre={(o) => {
+              setSelectedOffreForDetail(o);
+              setActiveScreen('E3');
+            }}
+          />
+        )}
+
+        {/* E12 : Espace Admin - Utilisateurs */}
+        {activeScreen === 'E12' && (
+          <AdminUsersView
+            users={users}
+            roles={roles}
+            onToggleStatus={(userId) => {
+              setUsers((prev) =>
+                prev.map((u) =>
+                  u.id === userId
+                    ? { ...u, statut: u.statut === 'ACTIF' ? 'INACTIF' : 'ACTIF' }
+                    : u
+                )
+              );
+            }}
+            onDeleteUser={(userId) => {
+              setUsers((prev) => prev.filter((u) => u.id !== userId));
+            }}
+            onCreateUser={(userData) => {
+              const u: User = {
+                id: `u-${Date.now()}`,
+                nom: userData.nom || '',
+                prenom: userData.prenom || '',
+                email: userData.email || '',
+                statut: 'ACTIF',
+                role: userData.role,
+              };
+              setUsers([...users, u]);
+            }}
+          />
+        )}
+
+        {/* E13 : Espace Admin - Rôles & Permissions */}
+        {activeScreen === 'E13' && (
+          <AdminRolesView
+            roles={roles}
+            allPermissions={allPermissions}
+            onUpdateRolePermissions={(roleId, permissionIds) => {
+              setRoles((prev) =>
+                prev.map((r) => {
+                  if (r.id === roleId) {
+                    const newPerms = allPermissions.filter((p) =>
+                      permissionIds.includes(p.id)
+                    );
+                    return { ...r, permissions: newPerms };
+                  }
+                  return r;
+                })
+              );
+            }}
+          />
+        )}
+
+        {/* E14 : Espace Admin - Entreprises & Offres */}
+        {activeScreen === 'E14' && (
+          <AdminEntreprisesView
+            entreprises={entreprises}
+            onToggleStatus={(entId) => {
+              setEntreprises((prev) =>
+                prev.map((e) =>
+                  e.id === entId
+                    ? { ...e, statut: e.statut === 'ACTIVE' ? 'DESACTIVEE' : 'ACTIVE' }
+                    : e
+                )
+              );
+            }}
+            onDeleteEntreprise={(entId) => {
+              setEntreprises((prev) => prev.filter((e) => e.id !== entId));
+            }}
+            onAddEntreprise={(entData) => {
+              const newEnt: Entreprise = {
+                id: `c-${Date.now()}`,
+                nom: entData.nom || 'Entreprise',
+                secteur: entData.secteur || 'Technologie',
+                ville: entData.ville || 'Tunis',
+                pays: 'Tunisie',
+                statut: 'ACTIVE',
+                offres_count: 0,
+                recruteurs_count: 1,
+              };
+              setEntreprises([...entreprises, newEnt]);
+            }}
+            onViewCompany={(ent) => setActiveScreen('E11')}
+          />
+        )}
+
+        {/* E15 : Espace Admin - Journal des Notifications */}
+        {activeScreen === 'E15' && (
+          <AdminNotificationsView
+            notifications={notifications}
+            onResend={(notifId) => {
+              setNotifications((prev) =>
+                prev.map((n) =>
+                  n.id === notifId ? { ...n, statut_envoi: 'ENVOYE' } : n
+                )
+              );
+            }}
+          />
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-[#e8ebf3] bg-white py-6 text-center text-xs text-[#8a93a8]">
+        <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div>
+            <strong>Talenta Recruitment OS</strong> · Application intelligente de recrutement conforme aux 11 modules & 12 entités du cahier des charges.
+          </div>
+          <div className="flex items-center gap-4 text-[11px] font-semibold text-[#5a4be0]">
+            <span>Laravel REST API</span>
+            <span>·</span>
+            <span>Next.js Frontend</span>
+            <span>·</span>
+            <span>Assistance IA Éthique</span>
+          </div>
         </div>
-      </section>
-    </main>
-  )
+      </footer>
+
+      {/* Modals E2 & E4 */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        initialTab={authModalTab}
+        users={users}
+        onLoginSuccess={(user, role) => {
+          setCurrentUser(user);
+          setCurrentRole(role);
+          if (role === 'RECRUTEUR') setActiveScreen('E7');
+          else if (role === 'ADMIN') setActiveScreen('E12');
+          else setActiveScreen('E1');
+        }}
+      />
+
+      <PostulerModal
+        isOpen={postulerModalOpen}
+        onClose={() => setPostulerModalOpen(false)}
+        offre={postulerOffreTarget}
+        currentUser={currentUser}
+        savedCvs={INITIAL_CVS}
+        hasAlreadyApplied={
+          postulerOffreTarget
+            ? candidateApplicationOfferIds.includes(postulerOffreTarget.id)
+            : false
+        }
+        onApplicationSubmit={handleApplicationSubmit}
+        onGoToMyApplications={() => {
+          setCurrentRole('CANDIDAT');
+          setActiveScreen('E5');
+        }}
+      />
+    </div>
+  );
 }
-
-function Stat({ icon: Icon, label, value, trend }: { icon: typeof BriefcaseBusiness; label: string; value: string; trend: string }) { return <div className="rounded-2xl border border-[#e9ebf2] bg-white p-5"><div className="mb-4 flex items-center justify-between"><div className="grid size-9 place-items-center rounded-xl bg-[#f0efff] text-[#6458e8]"><Icon size={17} /></div><span className="text-[10px] font-semibold text-[#4eb27d]">↗ {trend}</span></div><div className="text-[27px] font-bold tracking-[-.04em]">{value}</div><div className="mt-1 text-[11px] text-[#8c94a8]">{label}</div></div> }
-function Bar({ month, value, active }: { month: string; value: string; active?: boolean }) { return <div className="flex h-full flex-1 flex-col items-center justify-end gap-2"><div className={`w-full max-w-[34px] rounded-t-md ${active ? 'bg-[#6458e8]' : 'bg-[#dcdafb]'}`} style={{ height: value }} /><span className="text-[10px] text-[#9ca3b5]">{month}</span></div> }
-function Legend({ color, label, value }: { color: string; label: string; value: string }) { return <div className="flex items-center gap-2"><span className={`size-2 rounded-full ${color}`} /> <span className="w-[88px]">{label}</span><strong className="text-[#4f586d]">{value}</strong></div> }
