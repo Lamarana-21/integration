@@ -94,6 +94,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/cvs', [CvController::class, 'store']);
     });
     Route::get('/cvs/{id}/download', [CvController::class, 'download']);
+    Route::post('/cvs/{id}/analyse', [AnalyseCvController::class, 'analyserCv']);
     Route::delete('/cvs/{id}', [CvController::class, 'destroy']);
 
     // --- Module 7 & 8 : Candidatures ---

@@ -8,7 +8,11 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: 'login' | 'register';
-  onLoginSuccess: (user: UserType, role: RoleName) => void;
+  onLoginSuccess: (
+    user: UserType,
+    role: RoleName,
+    credentials?: { email: string; password: string }
+  ) => boolean | Promise<boolean>;
   users: UserType[];
 }
 
@@ -30,7 +34,7 @@ export function AuthModal({
 
   if (!isOpen) return null;
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -50,8 +54,15 @@ export function AuthModal({
     }
 
     const roleName = targetUser.role?.nom ?? 'CANDIDAT';
-    onLoginSuccess(targetUser, roleName);
-    onClose();
+    const accepted = await onLoginSuccess(targetUser, roleName, {
+      email: email.trim(),
+      password,
+    });
+    if (accepted) {
+      onClose();
+    } else {
+      setError('Connexion au serveur impossible. Vérifiez que Laravel est démarré.');
+    }
   };
 
   const handleRegister = (e: React.FormEvent) => {
@@ -82,7 +93,7 @@ export function AuthModal({
       role: { id: 'r-cand', nom: 'CANDIDAT', description: 'Candidat' },
     };
 
-    onLoginSuccess(newUser, 'CANDIDAT');
+    void onLoginSuccess(newUser, 'CANDIDAT');
     onClose();
   };
 

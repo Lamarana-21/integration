@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AnalyseCv;
+use App\Models\Cv;
 use App\Services\AiCvAnalysisService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,6 +31,19 @@ class AnalyseCvController extends Controller
             'message' => 'Analyse IA actualisée avec succès',
             'analyse' => $nouvelle,
         ]);
+    }
+
+    public function analyserCv(Request $request, string $id): JsonResponse
+    {
+        $cv = Cv::with('candidat')->findOrFail($id);
+        abort_unless($request->user()->candidat?->id === $cv->candidat_id || $request->user()->isAdmin(), 403);
+
+        $analyse = $this->aiService->analyser($cv);
+
+        return response()->json([
+            'message' => 'CV analysé avec succès',
+            'analyse' => $analyse,
+        ], 201);
     }
 
     /**

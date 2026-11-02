@@ -31,7 +31,7 @@ class AiCvAnalysisService
         $resume = $this->genererResume($infosExtraites, $offre);
 
         // 4. Module 9.4 : Calcul du score de correspondance avec l'offre
-        $scoreResult = $this->calculerScoreCorrespondance($infosExtraites, $offre);
+        $scoreResult = $this->calculerScoreCorrespondance($infosExtraites, $offre, $cv);
 
         // 5. Module 9.5 : Niveau de confiance
         $niveauConfiance = $this->evaluerNiveauConfiance($infosExtraites, $cv);
@@ -126,13 +126,14 @@ class AiCvAnalysisService
     /**
      * Calcul du score de correspondance, points forts et manques (Module 9.4)
      */
-    protected function calculerScoreCorrespondance(array $infos, ?Offre $offre): array
+    protected function calculerScoreCorrespondance(array $infos, ?Offre $offre, Cv $cv): array
     {
         if (!$offre) {
+            $ats = $this->calculerScoreATS($infos, $cv);
             return [
-                'score' => 75,
-                'points_forts' => ['Compétences techniques variées', 'Expérience pratique pertinente'],
-                'points_manquants' => ['Aucune offre de référence pour comparaison détaillée'],
+                'score' => $ats['score'],
+                'points_forts' => $ats['points_forts'],
+                'points_manquants' => $ats['points_manquants'],
             ];
         }
 
@@ -187,6 +188,62 @@ class AiCvAnalysisService
             'score' => $totalScore,
             'points_forts' => array_slice($pointsForts, 0, 4),
             'points_manquants' => array_slice($pointsManquants, 0, 3),
+        ];
+    }
+
+    /**
+     * Score ATS pour un CV autonome : lisibilité, structure et contenu indexable.
+     */
+    protected function calculerScoreATS(array $infos, Cv $cv): array
+    {
+        $score = 0;
+        $pointsForts = [];
+        $pointsManquants = [];
+
+        $extension = strtolower(pathinfo($cv->nom_fichier, PATHINFO_EXTENSION));
+        if (in_array($extension, ['pdf', 'docx'], true)) {
+            $score += 20;
+            $pointsForts[] = 'Format PDF/DOCX lisible par les ATS';
+        } else {
+            $pointsManquants[] = 'Utiliser un fichier PDF ou DOCX standard';
+        }
+
+        if ($cv->taille_octets >= 1000 && $cv->taille_octets <= 5 * 1024 * 1024) {
+            $score += 10;
+            $pointsForts[] = 'Taille de fichier compatible avec un traitement ATS';
+        } else {
+            $pointsManquants[] = 'Vérifier la taille et le contenu du fichier';
+        }
+
+        $sections = [
+            'Compétences' => !empty($infos['competences']),
+            'Expériences' => !empty($infos['experiences']),
+            'Formations' => !empty($infos['formations']),
+            'Langues' => !empty($infos['langues']),
+        ];
+        $sectionsPresentes = count(array_filter($sections));
+        $score += $sectionsPresentes * 12;
+        foreach ($sections as $section => $present) {
+            if ($present) {
+                $pointsForts[] = "Section {$section} détectée";
+            } else {
+                $pointsManquants[] = "Ajouter une section {$section}";
+            }
+        }
+
+        if (count($infos['competences']) >= 5) {
+            $score += 12;
+            $pointsForts[] = 'Mots-clés techniques suffisamment détaillés';
+        } else {
+            $pointsManquants[] = 'Ajouter davantage de mots-clés liés au poste visé';
+        }
+
+        $score = min(100, max(0, $score));
+
+        return [
+            'score' => $score,
+            'points_forts' => array_slice($pointsForts, 0, 5),
+            'points_manquants' => array_slice($pointsManquants, 0, 5),
         ];
     }
 

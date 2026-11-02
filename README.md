@@ -1,129 +1,143 @@
-# 🚀 Talenta — Application Intelligente de Recrutement
+# 🏢 Talenta RH — Plateforme de Recrutement Intelligente
 
-Système complet de recrutement développé dans le respect strict du cahier des charges (Compte rendu complet : modules, entités, règles métier, parcours et interfaces E1 à E15).
+> Application Web fullstack de recrutement — Gestion des entreprises, offres, candidats et candidatures avec analyse de CV assistée par IA.
+>
+> *Cahier des charges : Barry Oumouratou · Oct 2026*
 
 ---
 
-## 🏛️ Architecture du Projet
-
-Le projet adopte une architecture applicative modulaire et moderne :
-- **Backend API REST (Laravel 12 / PHP 8.4)** : Gestion sécurisée des données, des règles métier (RM1–RM10), de l'authentification par jeton (Sanctum), des rôles & permissions, de l'analyse assistée par IA et du journal des notifications.
-- **Frontend Web App (Next.js 16 / React 19 / TailwindCSS / Lucide)** : Interface utilisateur haut de gamme, fluide et dynamique implémentant l'ensemble des 15 maquettes (E1 à E15) avec un commutateur de rôles en un clic.
+## 📁 Structure du dépôt
 
 ```
 integration/
-├── backend/                  # API REST Laravel
+├── backend/          ← API REST Laravel 12 (PHP 8.4)
 │   ├── app/
-│   │   ├── Http/
-│   │   │   ├── Controllers/Api/   # 11 contrôleurs modulaires
-│   │   │   └── Middleware/        # CheckPermission (contrôle 403)
-│   │   ├── Models/                # 11 modèles Eloquent avec UUIDs
-│   │   └── Services/
-│   │       ├── AiCvAnalysisService.php # Moteur d'analyse IA avec anti-biais
-│   │       └── NotificationService.php # Service transactionnel d'e-mails
+│   │   ├── Http/Controllers/Api/     # 11 contrôleurs (1 par module)
+│   │   ├── Models/                   # 12 modèles Eloquent (UUIDs)
+│   │   ├── Services/
+│   │   │   ├── AiCvAnalysisService.php   # Analyse IA + anti-biais
+│   │   │   └── NotificationService.php   # Journal des e-mails
+│   │   └── Http/Middleware/
+│   │       └── CheckPermission.php       # Contrôle d'accès (RM9)
 │   ├── database/
-│   │   ├── migrations/            # 11 migrations (12 entités)
-│   │   └── seeders/               # Jeu de données d'essai complet
-│   └── tests/Feature/             # Tests unitaires & fonctionnels PHPUnit
+│   │   ├── migrations/               # 13 migrations (MySQL / SQLite)
+│   │   └── seeders/DatabaseSeeder.php    # Jeu de données complet
+│   ├── routes/api.php                # 56 endpoints REST
+│   └── tests/Feature/RecruitmentApiTest.php  # 7 tests (RM1-RM10)
 │
-├── app/                      # Frontend Next.js (Router & Pages)
-├── components/
-│   ├── Navbar.tsx            # Navigation & commutateur de rôles
-│   └── screens/              # Les écrans E1 à E15 conformes aux maquettes
-├── lib/
-│   ├── types.ts              # Interfaces TypeScript des 12 entités
-│   ├── api.ts                # Client API & résilience hors-ligne
-│   └── initialData.ts        # Données de démonstration miroir
-└── package.json
+└── frontend/         ← Application Next.js 16 / React 19
+    ├── app/
+    │   ├── globals.css               # Design system & tokens CSS
+    │   ├── layout.tsx                # Layout SEO
+    │   └── page.tsx                  # Contrôleur principal (E1–E15)
+    ├── components/
+    │   ├── Navbar.tsx                # Navigation + sélecteur d'acteur
+    │   └── screens/                  # 15 écrans métier (E1 à E15)
+    ├── lib/
+    │   ├── api.ts                    # Client API — 11 modules + fallback
+    │   ├── types.ts                  # Types TypeScript (12 entités)
+    │   └── initialData.ts            # Données démo (miroir du seeder)
+    └── README.md                     # Documentation frontend complète
 ```
 
 ---
 
-## 📋 Périmètre Fonctionnel (11 Modules)
+## ⚡ Démarrage rapide
 
-| Module | Fonctionnalité | Écrans associés |
-| :--- | :--- | :--- |
-| **Module 1** | **Gestion des utilisateurs** (Créer, lister, modifier, suspendre, profil) | E2, E12 |
-| **Module 2** | **Gestion des droits** (Rôles & permissions, refus 403, masquer actions) | E13 |
-| **Module 3** | **Authentification** (Inscription candidat, connexion email/mdp, session, reset) | E2 |
-| **Module 4** | **Gestion des entreprises** (Fiche entreprise, logo, offres, recruteurs) | E11, E14 |
-| **Module 5** | **Gestion des offres** (Créer, brouillon/publier, filtres, date limite, clôture) | E1, E3, E8 |
-| **Module 6** | **Gestion des candidats** (Profil complet, compétences, formations, CVs, RGPD) | E6, E10 |
-| **Module 7** | **Dépôt des candidatures** (Postuler avec CV, lettre, confirmation, suivi, retrait) | E4, E5 |
-| **Module 8** | **Gestion des candidatures recruteur** (Trier par score IA, statuts, notes, export CSV) | E7, E9, E10 |
-| **Module 9** | **Analyse des CV par IA** (Extraction structurée, scoring 0-100, anti-biais, suggestion) | E7, E9, E10 |
-| **Module 10**| **Tableau de bord** (Indicateurs clés, taux présélection, délai moyen, graphes) | E7 |
-| **Module 11**| **Notifications** (E-mails automatiques, journalisation, renvoi, modèles) | E15 |
+### 1. Backend (Laravel 12)
 
----
-
-## 🧠 Analyse des CV par IA & Cadre Éthique
-
-Conformément à la **Section 7** et au **Module 9** :
-1. **Suggestion d'aide à la décision uniquement** : L'IA ne valide ni ne refuse jamais automatiquement une candidature (Règle RM8). La décision finale appartient toujours au recruteur.
-2. **Élimination préventive des biais démographiques** (Module 9.8) : Les photos, âges, genres et nationalités sont masqués avant l'analyse pour garantir une évaluation neutre fondée uniquement sur les compétences et expériences.
-3. **Explicabilité & Transparence** : Chaque résultat présente un score de correspondance (0 à 100), les points forts (+), les points manquants (-) et un niveau de confiance (`FAIBLE`, `MOYEN`, `ELEVE`).
-4. **Correction humaine & Relance** : Le recruteur peut corriger les informations extraites ou relancer l'analyse.
-
----
-
-## 🛡️ Règles Métier (RM1 à RM10)
-
-- **RM1** : Une offre n'est visible des candidats que si son statut est `PUBLIEE` et que sa date limite n'est pas dépassée.
-- **RM2** : Un candidat ne peut postuler qu'une seule fois à une même offre (vérification d'unicité).
-- **RM3** : Seul un recruteur rattaché à l'entreprise modifie ses offres et traite ses candidatures.
-- **RM4** : Le statut suit l'ordre : *Reçue > En examen > Présélectionnée > Entretien > Acceptée / Refusée*.
-- **RM5** : Un candidat peut retirer sa candidature tant qu'elle n'est ni Acceptée ni Refusée.
-- **RM6** : La clôture d'une offre ne supprime pas ses candidatures.
-- **RM7** : Un CV n'est accessible qu'à son propriétaire et aux recruteurs de l'entreprise concernée.
-- **RM8** : Aucun statut n'est modifié automatiquement par l'IA.
-- **RM9** : Toute permission modifiée pour un rôle s'applique immédiatement à tous les comptes associés dès la requête suivante.
-- **RM10** : Un compte `INACTIF` ne peut pas se connecter.
-
----
-
-## 💻 Démarrage Rapide
-
-### 1. Démarrer le Backend Laravel
-
-```bash
+```powershell
 cd backend
-php artisan migrate:fresh --seed
+
+# Variables d'environnement (déjà configuré pour MySQL integration)
+# DB_CONNECTION=mysql, DB_DATABASE=integration, DB_PORT=3306, root/''
+
+# Migrations + données de démonstration
+php artisan migrate:fresh --seed --force
+
+# Démarrer l'API
 php artisan serve
+# → http://127.0.0.1:8000
 ```
-> Le backend sera actif sur `http://127.0.0.1:8000`.
 
-### 2. Démarrer le Frontend Web
+### 2. Frontend (Next.js 16)
 
-```bash
-# Dans le dossier principal (integration)
+```powershell
+cd frontend
+
+# Configuration
+cp .env.local.example .env.local
+
+# Installation (déjà fait si node_modules présent)
 npm install
+
+# Démarrer l'interface
 npm run dev
+# → http://localhost:3000
 ```
-> Ouvrez votre navigateur sur `http://localhost:3000`.
-
-### 3. Lancer les Tests Automatisés
-
-- **Backend (PHPUnit)** :
-  ```bash
-  cd backend && php artisan test
-  ```
-  *(7 tests fonctionnels couvrant les règles métier RM1, RM2, RM4, RM5, RM10 et les notifications)*
-
-- **Frontend (Build & Types)** :
-  ```bash
-  npm run build
-  ```
 
 ---
 
-## 👥 Comptes de Démonstration (Seeder)
+## 👥 Comptes de démonstration
 
-| Profil | Nom | E-mail | Mot de passe | Rôle |
-| :--- | :--- | :--- | :--- | :--- |
-| **Administrateur** | Amélie Moreau | `admin@talenta.example` | `password123` | ADMIN (E12, E13, E14, E15) |
-| **Recruteur Alpha** | Rached Ben Ali | `rh@alpha.example` | `password123` | RECRUTEUR (E7, E8, E9, E10, E11) |
-| **Recruteur Beta** | Sami Khedhir | `rh@beta.example` | `password123` | RECRUTEUR (Société Beta) |
-| **Candidat 1** | Amina Ben Salem | `amina@mail.example` | `password123` | CANDIDAT (E1, E3, E4, E5, E6) |
-| **Candidat 2** | Karim Trabelsi | `karim@mail.example` | `password123` | CANDIDAT (Compte Inactif RM10) |
-| **Candidat 3** | Sara Mansour | `sara@mail.example` | `password123` | CANDIDAT |
+| Rôle | E-mail | Mot de passe | Statut |
+|------|--------|-------------|--------|
+| **Administrateur** | `admin@talenta.example` | `password123` | Actif |
+| **Recruteur Alpha** | `rh@alpha.example` | `password123` | Actif |
+| **Recruteur Beta** | `rh@beta.example` | `password123` | Actif |
+| **Candidat** | `amina@mail.example` | `password123` | Actif |
+| **Candidat** | `sara@mail.example` | `password123` | Actif |
+| **Candidat (inactif)** | `karim@mail.example` | `password123` | **Inactif (test RM10)** |
+
+---
+
+## 🏗️ Modules & Couverture
+
+| # | Module | Backend | Frontend |
+|---|--------|---------|---------|
+| 1 | Gestion des utilisateurs | `UserController` | E12 — AdminUsersView |
+| 2 | Rôles & Permissions | `RolePermissionController` + middleware | E13 — AdminRolesView |
+| 3 | Authentification | `AuthController` (Sanctum) | E2 — AuthModal |
+| 4 | Entreprises | `EntrepriseController` | E11, E14 |
+| 5 | Offres | `OffreController` | E1, E3, E8 |
+| 6 | Profil candidat | `CandidatController`, `CvController` | E6 |
+| 7 | Dépôt candidatures | `CandidatureController::store` | E4, E5 |
+| 8 | Gestion candidatures | `CandidatureController` | E9 |
+| 9 | Analyse IA | `AiCvAnalysisService` | E10 |
+| 10 | Tableau de bord | `DashboardController` | E7 |
+| 11 | Notifications | `NotificationService` | E15 |
+
+---
+
+## 🗄️ Base de données
+
+- **SGBD** : MySQL 3306 (WAMP) — base `integration`
+- **Tables** : 21 tables créées par les 13 migrations
+- **Données démo** : 28 permissions, 3 rôles, 3 entreprises, 6 utilisateurs, 4 offres, 3 candidatures, 3 analyses IA
+
+---
+
+## ✅ Tests
+
+```powershell
+cd backend
+php artisan test
+# ✔ 7 tests passés · 19 assertions (RM1, RM2, RM4, RM5, RM10, notifications)
+```
+
+---
+
+## 🔐 Règles métier (RM1–RM10)
+
+| RM | Règle | Contrôle |
+|----|-------|----------|
+| RM1 | Seules les offres publiées non expirées sont visibles | `scopePublieesEtActives()` |
+| RM2 | Un candidat · une offre (1 candidature max) | Contrainte UNIQUE BD + 422 API |
+| RM3 | Recruteur ne gère que ses propres offres | Contrôle `entreprise_id` |
+| RM4 | Statuts ordonnés et irréversibles | Validation enum ordonnée |
+| RM5 | Retrait possible si non traitée | Contrôle statut avant DELETE |
+| RM6 | Clôturer conserve les candidatures | Pas de cascade DELETE |
+| RM7 | CV privés (candidat + recruteurs concernés) | Contrôle accès storage |
+| RM8 | IA = aide, jamais décision automatique | Bannière obligatoire + statut manuel |
+| RM9 | Permissions appliquées immédiatement | Middleware `CheckPermission` |
+| RM10 | Comptes inactifs refusés | HTTP 403 + message clair |

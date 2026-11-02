@@ -23,7 +23,6 @@ return new class extends Migration
         });
 
         Schema::create('role_permission', function (Blueprint $table) {
-            $table->uuid('id')->nullable();
             $table->uuid('role_id');
             $table->uuid('permission_id');
             $table->timestamps();

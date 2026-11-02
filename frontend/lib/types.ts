@@ -52,16 +52,22 @@ export interface User {
 }
 
 export interface Experience {
+  id?: string;
   poste: string;
   employeur: string;
   dates: string;
   description: string;
+  lieu?: string;
+  technologies?: string[];
+  actuel?: boolean;
 }
 
 export interface Formation {
+  id?: string;
   diplome: string;
   ecole: string;
   annee: string;
+  description?: string;
 }
 
 export interface CV {
@@ -72,15 +78,31 @@ export interface CV {
   taille_octets: number;
   url_stockage: string;
   created_at?: string;
+  est_principal?: boolean;
+  score_ia?: number;
+  est_genere?: boolean;
+  template_style?: 'moderne' | 'minimaliste' | 'corporate';
 }
 
 export interface Candidat {
   id: string;
   utilisateur_id: string;
   user?: User;
+  titre?: string;
   telephone?: string;
   ville?: string;
+  pays?: string;
+  code_postal?: string;
+  avatar_url?: string;
+  avatar_bg?: string;
+  linkedin_url?: string;
+  github_url?: string;
+  portfolio_url?: string;
   resume?: string;
+  statut_recherche?: 'EN_RECHERCHE' | 'A_LECOUTE' | 'NON_DISPONIBLE';
+  type_contrat_souhaite?: string[];
+  pretention_salariale?: string;
+  teletravail_souhaite?: 'TOTAL' | 'HYBRIDE' | 'SUR_SITE' | 'INDIFFERENT';
   competences: string[];
   experiences: Experience[];
   formations: Formation[];

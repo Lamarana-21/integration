@@ -1,21 +1,18 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CheckCircle2, FileText, Sparkles, Upload, X } from 'lucide-react';
-import { Candidature, CV, Offre, User } from '@/lib/types';
+import { CheckCircle2, Sparkles, Upload, X } from 'lucide-react';
+import { AnalyseCv, Offre, User } from '@/lib/types';
 
 interface PostulerModalProps {
   isOpen: boolean;
   onClose: () => void;
   offre: Offre | null;
   currentUser: User | null;
-  savedCvs: CV[];
   onApplicationSubmit: (data: {
     offreId: string;
-    cvId: string;
-    lettre: string;
-    message: string;
-  }) => void;
+    file: File;
+  }) => Promise<{ analyse?: AnalyseCv; error?: string }>;
   hasAlreadyApplied: boolean;
   onGoToMyApplications: () => void;
 }
@@ -25,23 +22,20 @@ export function PostulerModal({
   onClose,
   offre,
   currentUser,
-  savedCvs,
   onApplicationSubmit,
   hasAlreadyApplied,
   onGoToMyApplications,
 }: PostulerModalProps) {
-  const [cvChoice, setCvChoice] = useState<'saved' | 'upload'>('saved');
-  const [selectedCvId, setSelectedCvId] = useState(savedCvs[0]?.id || '');
-  const [uploadedFileName, setUploadedFileName] = useState('');
-  const [lettreMotivation, setLettreMotivation] = useState('');
-  const [message, setMessage] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [confirmedAccuracy, setConfirmedAccuracy] = useState(false);
   const [submittedSuccess, setSubmittedSuccess] = useState(false);
+  const [analysis, setAnalysis] = useState<AnalyseCv | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   if (!isOpen || !offre) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -55,19 +49,19 @@ export function PostulerModal({
       return;
     }
 
-    const cvIdToUse = cvChoice === 'saved' ? selectedCvId : 'cv-uploaded';
-    if (!cvIdToUse && savedCvs.length === 0 && !uploadedFileName) {
-      setError('Veuillez sélectionner ou téléverser votre CV.');
+    if (!selectedFile) {
+      setError('Veuillez téléverser votre CV au format PDF ou DOCX.');
       return;
     }
 
-    onApplicationSubmit({
-      offreId: offre.id,
-      cvId: cvIdToUse || savedCvs[0]?.id || 'cv-default',
-      lettre: lettreMotivation,
-      message,
-    });
-
+    setSubmitting(true);
+    const result = await onApplicationSubmit({ offreId: offre.id, file: selectedFile });
+    setSubmitting(false);
+    if (result.error || !result.analyse) {
+      setError(result.error || 'Le CV n’a pas pu être analysé.');
+      return;
+    }
+    setAnalysis(result.analyse);
     setSubmittedSuccess(true);
   };
 
@@ -96,8 +90,18 @@ export function PostulerModal({
             <p className="mt-2 text-xs leading-5 text-[#636b80]">
               Votre candidature pour le poste de <strong>{offre.titre}</strong> chez{' '}
               <strong>{offre.entreprise?.nom}</strong> a bien été enregistrée.
-              Un e-mail de confirmation vous a été envoyé et l'analyse IA de votre CV a été initiée.
+              Votre CV a été analysé selon les règles ATS.
             </p>
+
+            {analysis && (
+              <div className="mt-5 rounded-2xl border border-[#cbeedc] bg-[#edf9f3] p-4 text-left">
+                <div className="text-xs font-bold text-[#287e56]">Score ATS</div>
+                <div className="mt-1 text-3xl font-black text-[#258957]">
+                  {analysis.score_correspondance}/100
+                </div>
+                <p className="mt-1 text-[11px] text-[#4b7562]">{analysis.resume}</p>
+              </div>
+            )}
 
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <button
@@ -145,100 +149,31 @@ export function PostulerModal({
             )}
 
             <form onSubmit={handleSubmit} className="mt-5 space-y-5">
-              {/* 1. CV Selection */}
+              {/* CV upload */}
               <div>
                 <label className="text-xs font-extrabold text-[#1a2133]">
-                  1. Votre Curriculum Vitae (CV) *
+                  Votre Curriculum Vitae (CV) *
                 </label>
-                <div className="mt-2 space-y-2 text-xs">
-                  {savedCvs.length > 0 && (
-                    <label className="flex items-center gap-2.5 rounded-xl border border-[#e4e7f0] bg-[#fafbfc] p-3 cursor-pointer hover:border-[#b8aefb]">
-                      <input
-                        type="radio"
-                        name="cv_choice"
-                        checked={cvChoice === 'saved'}
-                        onChange={() => setCvChoice('saved')}
-                        className="accent-[#594be0]"
-                      />
-                      <FileText size={16} className="text-[#594be0]" />
-                      <div className="flex-1">
-                        <span className="font-bold text-[#1a2235]">
-                          Utiliser mon CV enregistré :
-                        </span>{' '}
-                        <span className="text-[#594be0]">{savedCvs[0].nom_fichier}</span>
-                      </div>
-                    </label>
-                  )}
-
-                  <label className="flex items-center gap-2.5 rounded-xl border border-[#e4e7f0] bg-[#fafbfc] p-3 cursor-pointer hover:border-[#b8aefb]">
-                    <input
-                      type="radio"
-                      name="cv_choice"
-                      checked={cvChoice === 'upload'}
-                      onChange={() => setCvChoice('upload')}
-                      className="accent-[#594be0]"
-                    />
-                    <Upload size={16} className="text-[#656e84]" />
-                    <div className="flex-1">
-                      <span className="font-bold text-[#1a2235]">
-                        Téléverser un nouveau CV
-                      </span>
-                      <span className="ml-1 text-[11px] text-[#868fa4]">
-                        (PDF ou DOCX, 5 Mo max)
-                      </span>
+                <label className="mt-2 flex cursor-pointer items-center gap-2.5 rounded-xl border border-dashed border-[#b8aefb] bg-[#fafbfc] p-5 text-xs hover:bg-[#f7f5ff]">
+                  <Upload size={18} className="text-[#594be0]" />
+                  <div className="flex-1">
+                    <span className="font-bold text-[#1a2235]">
+                      {selectedFile ? selectedFile.name : 'Télécharger mon CV'}
+                    </span>
+                    <div className="mt-1 text-[11px] text-[#868fa4]">
+                      PDF ou DOCX, 5 Mo maximum · analyse ATS automatique
                     </div>
-                  </label>
-
-                  {cvChoice === 'upload' && (
-                    <div className="mt-2 rounded-xl border border-dashed border-[#ccd1df] p-4 text-center">
-                      <input
-                        type="file"
-                        accept=".pdf,.docx"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) setUploadedFileName(file.name);
-                        }}
-                        className="text-xs"
-                      />
-                      {uploadedFileName && (
-                        <div className="mt-1 text-xs font-bold text-[#2a945d]">
-                          Fichier sélectionné : {uploadedFileName}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 2. Lettre de motivation */}
-              <div>
-                <label className="text-xs font-extrabold text-[#1a2133]">
-                  2. Lettre de motivation (facultatif)
+                  </div>
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                    className="hidden"
+                  />
                 </label>
-                <textarea
-                  rows={3}
-                  value={lettreMotivation}
-                  onChange={(e) => setLettreMotivation(e.target.value)}
-                  placeholder="Expliquez brièvement pourquoi ce poste correspond à votre projet professionnel..."
-                  className="mt-1.5 w-full rounded-xl border border-[#e1e4ee] bg-[#fafbfc] p-3 text-xs text-[#1e2538] outline-none focus:border-[#6355e8]"
-                />
               </div>
 
-              {/* 3. Message au recruteur */}
-              <div>
-                <label className="text-xs font-extrabold text-[#1a2133]">
-                  3. Message au recruteur (facultatif)
-                </label>
-                <input
-                  type="text"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Disponibilité immédiate, préavis, etc."
-                  className="mt-1.5 w-full rounded-xl border border-[#e1e4ee] bg-[#fafbfc] px-3.5 py-2.5 text-xs text-[#1e2538] outline-none focus:border-[#6355e8]"
-                />
-              </div>
-
-              {/* 4. Confirmation */}
+              {/* Confirmation */}
               <label className="flex items-start gap-2.5 cursor-pointer pt-1 text-xs text-[#525a6f]">
                 <input
                   type="checkbox"
@@ -264,7 +199,7 @@ export function PostulerModal({
                   disabled={hasAlreadyApplied}
                   className="rounded-xl bg-[#594be0] px-6 py-2.5 text-xs font-bold text-white shadow-md hover:bg-[#483ad3] disabled:opacity-50"
                 >
-                  Envoyer ma candidature
+                  {submitting ? 'Analyse ATS en cours...' : 'Analyser et envoyer'}
                 </button>
               </div>
             </form>
