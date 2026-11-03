@@ -23,6 +23,7 @@ import {
   Upload,
   User,
   X,
+  Layers,
 } from 'lucide-react';
 import { Candidat, CV } from '@/lib/types';
 
@@ -47,16 +48,16 @@ export function MesCvsView({
   // CV Builder states
   const [cvTemplate, setCvTemplate] = useState<'moderne' | 'minimaliste' | 'corporate'>('moderne');
   const [cvAccentColor, setCvAccentColor] = useState<string>('#594be0');
+  const [showPhotoOnCv, setShowPhotoOnCv] = useState(true);
   const [cvCustomTitle, setCvCustomTitle] = useState(
-    `CV ${candidat.user?.prenom || 'Amina'} ${candidat.user?.nom || 'Ben Salem'} - ${candidat.titre || 'Développeuse Web'}`
+    `CV Dynamique ${candidat.user?.prenom || 'Amina'} ${candidat.user?.nom || 'Ben Salem'} - ${candidat.titre || 'Développeuse Web'}`
   );
   const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [selectedCvForPreview, setSelectedCvForPreview] = useState<CV | null>(null);
   const [generatedSuccess, setGeneratedSuccess] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Gestion du téléversement de fichier
+  // Gestion du téléversement de fichier depuis le PC
   const processUploadedFile = async (file: File) => {
     if (!file) return;
 
@@ -85,7 +86,12 @@ export function MesCvsView({
       return;
     }
 
-    const updated = [result.cv, ...cvList];
+    const newCvItem: CV = {
+      ...result.cv,
+      est_genere: false,
+    };
+
+    const updated = [newCvItem, ...cvList];
     setCvList(updated);
     onUpdateCvList(updated);
   };
@@ -115,10 +121,12 @@ export function MesCvsView({
     if (file) processUploadedFile(file);
   };
 
-  // Génération directe d'un CV en ligne et enregistrement
-  const handleGenerateCv = () => {
-    const newCv: CV = {
-      id: `cv-gen-${Date.now()}`,
+  // Génération / Mise à jour du CV Dynamique de l'application
+  const handleSaveDynamicCv = () => {
+    const existingDynamicIndex = cvList.findIndex((c) => c.est_genere);
+
+    const dynamicCv: CV = {
+      id: existingDynamicIndex >= 0 ? cvList[existingDynamicIndex].id : `cv-dyn-${Date.now()}`,
       candidat_id: candidat.id,
       nom_fichier: `${cvCustomTitle.trim().replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf`,
       type_mime: 'application/pdf',
@@ -130,7 +138,19 @@ export function MesCvsView({
       template_style: cvTemplate,
     };
 
-    const updated = [newCv, ...cvList.map((c) => ({ ...c, est_principal: false }))];
+    let updated: CV[];
+    if (existingDynamicIndex >= 0) {
+      // Met à jour le CV dynamique existant et le met en principal
+      updated = cvList.map((c, i) =>
+        i === existingDynamicIndex
+          ? dynamicCv
+          : { ...c, est_principal: false }
+      );
+    } else {
+      // Ajoute le nouveau CV dynamique
+      updated = [dynamicCv, ...cvList.map((c) => ({ ...c, est_principal: false }))];
+    }
+
     setCvList(updated);
     onUpdateCvList(updated);
     setGeneratedSuccess(true);
@@ -151,15 +171,10 @@ export function MesCvsView({
     onUpdateCvList(updated);
   };
 
-  // Checklist Qualité ATS
-  const atsChecks = [
-    { label: 'Nom & Coordonnées de contact', valid: Boolean(candidat.user?.nom && (candidat.telephone || candidat.user?.email)) },
-    { label: 'Résumé professionnel ou accroche', valid: Boolean(candidat.resume && candidat.resume.length > 20) },
-    { label: 'Au moins 3 compétences clés', valid: (candidat.competences?.length || 0) >= 3 },
-    { label: 'Au moins 1 expérience professionnelle', valid: (candidat.experiences?.length || 0) >= 1 },
-    { label: 'Au moins 1 formation ou diplôme', valid: (candidat.formations?.length || 0) >= 1 },
-  ];
-  const atsScore = Math.round((atsChecks.filter((c) => c.valid).length / atsChecks.length) * 100);
+  // Compteurs
+  const dynamicCvCount = cvList.filter((c) => c.est_genere).length;
+  const importedCvCount = cvList.filter((c) => !c.est_genere).length;
+  const principalCv = cvList.find((c) => c.est_principal);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 space-y-6">
@@ -181,23 +196,23 @@ export function MesCvsView({
         }
       `}</style>
 
-      {/* HEADER PRINCIPAL */}
+      {/* BANNIÈRE D'EN-TÊTE */}
       <div className="rounded-3xl border border-[#e8ebf3] bg-gradient-to-r from-white via-[#fafbfe] to-[#f4f2ff] p-6 sm:p-7 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-[#efedff] px-3 py-0.5 text-[11px] font-extrabold text-[#5547d7]">
-                Espace Candidat
+                Espace CV Candidat
               </span>
               <span className="text-xs text-[#828ca1]">
-                {cvList.length} document(s) enregistré(s)
+                {cvList.length} CV enregistré(s) ({dynamicCvCount} dynamique, {importedCvCount} importé)
               </span>
             </div>
             <h1 className="mt-2 text-2xl font-black text-[#171f33]">
-              Mes Curriculum Vitae (CV) & Créateur de CV
+              Mes Curriculum Vitae (CV) & Studio de Création
             </h1>
-            <p className="mt-1 text-xs text-[#6e7790]">
-              Déposez vos fichiers existants ou concevez un CV optimisé pour les recruteurs directement à partir de vos compétences et expériences.
+            <p className="mt-1 text-xs text-[#6e7790] max-w-2xl">
+              Choisissez la façon dont vous postulez : <strong>créez un CV dynamique en direct</strong> à partir de votre profil ou <strong>importez un fichier depuis votre ordinateur</strong>.
             </p>
           </div>
 
@@ -209,61 +224,81 @@ export function MesCvsView({
               ← Voir mon profil
             </button>
             <button
-              onClick={() => {
-                setSelectedCvForPreview(null);
-                setShowPreviewModal(true);
-              }}
+              onClick={() => setShowPreviewModal(true)}
               className="flex items-center gap-1.5 rounded-2xl bg-[#594be0] px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-[#594be0]/20 hover:bg-[#4739d2] transition"
             >
-              <Sparkles size={15} /> Studio CV en direct
+              <Eye size={15} /> Voir mon CV en plein écran
             </button>
           </div>
         </div>
       </div>
 
       {generatedSuccess && (
-        <div className="flex items-center gap-3 rounded-2xl border border-[#bbf7d0] bg-[#f0fdf4] p-4 text-xs font-bold text-[#166534] shadow-xs">
-          <CheckCircle2 size={18} className="text-[#16a34a]" />
-          <span>Votre CV a été généré avec succès et défini comme votre CV principal pour vos candidatures !</span>
+        <div className="flex items-center gap-3 rounded-2xl border border-[#bbf7d0] bg-[#f0fdf4] p-4 text-xs font-bold text-[#166534] shadow-xs animate-in slide-in-from-top-4">
+          <CheckCircle2 size={20} className="text-[#16a34a] shrink-0" />
+          <div>
+            <div>Votre CV dynamique a été enregistré et synchronisé avec votre profil !</div>
+            <div className="font-normal text-[11px] text-[#227142] mt-0.5">
+              Il est maintenant sélectionné comme votre CV par défaut pour postuler en 1 clic aux offres.
+            </div>
+          </div>
         </div>
       )}
 
-      {/* GRILLE : 2 COLONNES (STUDIO + MES DOCUMENTS) */}
+      {/* EXPLICATION DES 2 POSSIBILITÉS */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-3xl border border-[#d9d5fa] bg-gradient-to-br from-[#f8f7ff] to-[#f1effe] p-5 shadow-xs">
+          <div className="flex items-center gap-2.5 font-black text-[#5547d7] text-sm">
+            <Sparkles size={18} /> Possibilité 1 : CV Dynamique de l'application
+          </div>
+          <p className="mt-1.5 text-xs text-[#675cb2] leading-relaxed">
+            Conçu directement à partir de vos compétences, expériences et formations. Reste toujours à jour, conforme aux normes ATS des recruteurs et directement utilisable pour postuler.
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-[#dce3f1] bg-gradient-to-br from-[#f8faff] to-[#f0f4fc] p-5 shadow-xs">
+          <div className="flex items-center gap-2.5 font-black text-[#2e5aa6] text-sm">
+            <Upload size={18} /> Possibilité 2 : Importer un CV depuis votre PC
+          </div>
+          <p className="mt-1.5 text-xs text-[#526a97] leading-relaxed">
+            Vous avez déjà un CV prêt au format PDF ou DOCX ? Déposez-le simplement pour qu'il soit analysé et joint à vos candidatures selon votre préférence.
+          </p>
+        </div>
+      </div>
+
+      {/* GRILLE PRINCIPALE */}
       <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
-        {/* COLONNE GAUCHE: STUDIO & DÉPÔT */}
+        {/* COLONNE GAUCHE: CRÉATEUR DYNAMIQUE & DÉPÔT PC */}
         <div className="space-y-6">
-          {/* STUDIO DE CRÉATION DE CV EN LIGNE */}
+          {/* SECTION 1 : CRÉATEUR DE CV DYNAMIQUE */}
           <section className="rounded-3xl border-2 border-[#594be0]/25 bg-white p-6 sm:p-7 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#f0f2f7] pb-4">
               <div>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-[#efedff] px-2.5 py-0.5 text-[10px] font-extrabold text-[#5547d7]">
-                  <Sparkles size={12} /> Studio de Création ATS
+                  <Sparkles size={12} /> Studio Interactif
                 </span>
                 <h2 className="mt-1 text-base font-black text-[#171f33]">
-                  Générer un CV moderne à partir de votre profil
+                  Personnaliser mon CV dynamique de l'application
                 </h2>
                 <p className="text-[11px] text-[#717b92]">
-                  Injecte instantanément vos coordonnées, compétences, expériences et formations.
+                  Les informations sont directement synchronisées avec votre profil candidat.
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedCvForPreview(null);
-                    setShowPreviewModal(true);
-                  }}
+                  onClick={() => setShowPreviewModal(true)}
                   className="flex items-center gap-1.5 rounded-xl border border-[#594be0] bg-white px-3.5 py-2 text-xs font-bold text-[#594be0] hover:bg-[#f6f5ff] transition"
                 >
                   <Eye size={14} /> Prévisualiser A4
                 </button>
                 <button
                   type="button"
-                  onClick={handleGenerateCv}
+                  onClick={handleSaveDynamicCv}
                   className="flex items-center gap-1.5 rounded-xl bg-[#594be0] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#4739d2] transition"
                 >
-                  <Download size={14} /> Générer & Enregistrer
+                  <Download size={14} /> Enregistrer ce CV
                 </button>
               </div>
             </div>
@@ -326,7 +361,7 @@ export function MesCvsView({
 
                 <div>
                   <label className="text-xs font-bold text-[#353d52] block mb-1.5">
-                    Titre du document exporté
+                    Titre du CV dans l'application
                   </label>
                   <input
                     type="text"
@@ -336,31 +371,33 @@ export function MesCvsView({
                   />
                 </div>
 
-                <div className="rounded-2xl border border-[#edf0f7] bg-[#fafbfc] p-3.5 text-xs text-[#525a70]">
-                  <span className="font-bold text-[#1a2133] block mb-1">Synchronisé avec votre profil :</span>
-                  <div className="flex flex-wrap gap-2 text-[11px] text-[#636c84]">
-                    <span>✓ {candidat.user?.prenom} {candidat.user?.nom}</span>
-                    <span>·</span>
-                    <span>✓ {candidat.competences?.length || 0} compétences</span>
-                    <span>·</span>
-                    <span>✓ {candidat.experiences?.length || 0} expériences</span>
-                    <span>·</span>
-                    <span>✓ {candidat.formations?.length || 0} formations</span>
-                    <span>·</span>
-                    <span>✓ {candidat.langues?.length || 0} langues</span>
+                {/* Option photo sur le CV */}
+                <div className="flex items-center justify-between rounded-2xl border border-[#edf0f7] bg-[#fafbfc] p-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <User size={15} className="text-[#594be0]" />
+                    <span className="font-bold text-[#353d52]">Afficher ma photo de profil sur le CV</span>
                   </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showPhotoOnCv}
+                      onChange={(e) => setShowPhotoOnCv(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-[#d8dce8] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[#c5cbd9] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#594be0]"></div>
+                  </label>
                 </div>
               </div>
             </div>
           </section>
 
-          {/* ZONE DE DÉPÔT / TÉLÉVERSEMENT DE CV */}
+          {/* SECTION 2 : IMPORTER UN CV DEPUIS SON PC */}
           <section className="rounded-3xl border border-[#e8ebf3] bg-white p-6 sm:p-7 shadow-xs">
             <h2 className="text-sm font-extrabold text-[#171f33] flex items-center gap-2 mb-2">
-              <Upload size={16} className="text-[#594be0]" /> Déposer un CV existant (PDF ou DOCX)
+              <Upload size={16} className="text-[#594be0]" /> Importer un CV depuis mon PC (PDF ou DOCX)
             </h2>
             <p className="text-[11px] text-[#7d869c] mb-4">
-              Glissez-déposez un fichier depuis votre ordinateur ou cliquez pour parcourir. Taille maximale de 5 Mo.
+              Si vous préférez utiliser un fichier que vous avez déjà rédigé, glissez-le simplement ci-dessous.
             </p>
 
             <div
@@ -379,10 +416,10 @@ export function MesCvsView({
                 <Upload size={22} className={uploading ? 'animate-bounce' : ''} />
               </div>
               <p className="text-xs font-bold text-[#1e263a]">
-                {uploading ? 'Téléversement en cours...' : 'Glissez votre CV ici, ou cliquez pour sélectionner'}
+                {uploading ? 'Téléversement en cours...' : 'Glissez votre CV ici, ou cliquez pour parcourir'}
               </p>
               <span className="mt-1 text-[11px] text-[#8690a6]">
-                Formats autorisés : PDF ou Word DOCX (5 Mo maximum)
+                PDF ou Word DOCX (5 Mo maximum)
               </span>
 
               <input
@@ -402,19 +439,23 @@ export function MesCvsView({
             )}
           </section>
 
-          {/* LISTE DES CV ENREGISTRÉS */}
+          {/* SECTION 3 : MES DOCUMENTS DE CV ENREGISTRÉS */}
           <section className="rounded-3xl border border-[#e8ebf3] bg-white p-6 sm:p-7 shadow-xs">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-extrabold text-[#171f33] flex items-center gap-2">
-                <FileCheck size={16} className="text-[#594be0]" /> Documents de CV enregistrés ({cvList.length})
-              </h2>
-              <span className="text-[11px] text-[#7d869e]">Le CV par défaut sera envoyé lors de vos candidatures</span>
+              <div>
+                <h2 className="text-sm font-extrabold text-[#171f33] flex items-center gap-2">
+                  <FileCheck size={16} className="text-[#594be0]" /> Mes CV enregistrés ({cvList.length})
+                </h2>
+                <p className="text-[11px] text-[#7d869e] mt-0.5">
+                  Le CV marqué « Par défaut » est automatiquement proposé lorsque vous postulez.
+                </p>
+              </div>
             </div>
 
             <div className="space-y-3">
               {cvList.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-[#d8dce8] p-8 text-center text-xs text-[#7d869e]">
-                  Aucun CV enregistré pour le moment. Utilisez le studio ci-dessus pour en créer un ou déposez votre fichier.
+                  Aucun CV enregistré pour le moment.
                 </div>
               ) : (
                 cvList.map((cv) => (
@@ -425,20 +466,30 @@ export function MesCvsView({
                     }`}
                   >
                     <div className="flex items-center gap-3.5">
-                      <div className="grid size-11 place-items-center rounded-xl bg-white border border-[#e2e5f0] text-[#594be0] shadow-xs shrink-0">
+                      <div
+                        className={`grid size-11 place-items-center rounded-xl border shadow-xs shrink-0 ${
+                          cv.est_genere
+                            ? 'bg-[#efedff] border-[#d8d2fb] text-[#5547d7]'
+                            : 'bg-white border-[#e2e5f0] text-[#2563eb]'
+                        }`}
+                      >
                         <FileText size={22} />
                       </div>
                       <div>
                         <div className="flex items-center gap-2 font-bold text-[#1f2638]">
-                          <span className="truncate max-w-[280px] sm:max-w-[340px]">{cv.nom_fichier}</span>
+                          <span className="truncate max-w-[260px] sm:max-w-[320px]">{cv.nom_fichier}</span>
                           {cv.est_principal && (
                             <span className="rounded-full bg-[#594be0] px-2.5 py-0.5 text-[9px] font-black text-white">
-                              Principal
+                              Par défaut
                             </span>
                           )}
-                          {cv.est_genere && (
-                            <span className="rounded-full bg-[#e0f2fe] px-2 py-0.5 text-[9px] font-extrabold text-[#0369a1]">
-                              Généré en ligne
+                          {cv.est_genere ? (
+                            <span className="rounded-full bg-[#efedff] px-2 py-0.5 text-[9px] font-black text-[#5547d7] border border-[#d8d2fb]">
+                              🟣 CV Dynamique (Application)
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-[#f0f4fa] px-2 py-0.5 text-[9px] font-bold text-[#355280] border border-[#d3dded]">
+                              🔵 Importé depuis le PC
                             </span>
                           )}
                         </div>
@@ -460,10 +511,7 @@ export function MesCvsView({
                       )}
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedCvForPreview(cv);
-                          setShowPreviewModal(true);
-                        }}
+                        onClick={() => setShowPreviewModal(true)}
                         className="rounded-xl border border-[#dde1ee] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#525a6f] hover:bg-[#fafbfc] transition"
                       >
                         Aperçu
@@ -484,62 +532,76 @@ export function MesCvsView({
           </section>
         </div>
 
-        {/* COLONNE DROITE: CHECKLIST ATS & INFORMATIONS */}
+        {/* COLONNE DROITE : RÉCAPITULATIF & LIAISON CANDIDATURE */}
         <aside className="space-y-6">
-          {/* Diagnostic & Score ATS */}
-          <div className="rounded-3xl border border-[#e8ebf3] bg-white p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#636b80]">Score de Qualité ATS</span>
-              <span className="text-base font-black text-[#594be0]">{atsScore} %</span>
-            </div>
+          {/* CARTE CV PAR DÉFAUT ACTIF */}
+          <div className="rounded-3xl border border-[#d7d2fa] bg-gradient-to-br from-[#faf9fe] to-[#f2efff] p-6 shadow-xs space-y-4">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#5547d7]">
+              Liaison Candidature Active
+            </span>
 
-            <div className="h-2.5 w-full rounded-full bg-[#f0f2f7] overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-[#594be0] to-[#10b981] transition-all duration-500 rounded-full"
-                style={{ width: `${atsScore}%` }}
-              />
-            </div>
-
-            <p className="text-[11px] text-[#757f96] leading-relaxed">
-              Les recruteurs et les systèmes ATS analysent automatiquement la structure et le contenu textuel de votre CV.
-            </p>
-
-            <div className="space-y-2 border-t border-[#f0f2f7] pt-3">
-              {atsChecks.map((check, idx) => (
-                <div key={idx} className="flex items-center justify-between text-xs">
-                  <span className={`text-[11px] ${check.valid ? 'text-[#30384d]' : 'text-[#8b95ac]'}`}>
-                    {check.label}
-                  </span>
-                  {check.valid ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#16a34a]">
-                      <Check size={12} /> Prêt
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-[#f59e0b]">À compléter</span>
-                  )}
+            <div>
+              <div className="text-xs font-bold text-[#1f2638]">CV actuellement envoyé :</div>
+              {principalCv ? (
+                <div className="mt-2 rounded-2xl bg-white p-3.5 border border-[#e3dfff] shadow-xs">
+                  <div className="flex items-center gap-2 font-bold text-xs text-[#1a2133]">
+                    <FileText size={16} className="text-[#594be0]" />
+                    <span className="truncate">{principalCv.nom_fichier}</span>
+                  </div>
+                  <div className="mt-1 text-[10px] text-[#788299]">
+                    Type : {principalCv.est_genere ? 'CV Dynamique de l\'application' : 'Fichier importé'}
+                  </div>
                 </div>
-              ))}
+              ) : (
+                <div className="mt-2 text-xs text-[#788299]">Aucun CV défini par défaut.</div>
+              )}
             </div>
+
+            <p className="text-[11px] text-[#635cb0] leading-relaxed">
+              Lorsque vous cliquez sur « Postuler » à une offre d'emploi, vous pourrez postuler en 1 clic avec ce CV ou choisir d'en téléverser un autre.
+            </p>
+          </div>
+
+          {/* Données du profil utilisées pour le CV dynamique */}
+          <div className="rounded-3xl border border-[#e8ebf3] bg-white p-6 shadow-xs space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#636b80]">
+              Données du profil incluses
+            </h3>
+            <ul className="space-y-2 text-xs text-[#485167]">
+              <li className="flex items-center justify-between">
+                <span>Coordonnées & Contact</span>
+                <span className="font-bold text-[#16a34a]">Prêt</span>
+              </li>
+              <li className="flex items-center justify-between">
+                <span>Photo de profil</span>
+                <span className="font-bold text-[#594be0]">
+                  {candidat.avatar_url || candidat.user?.avatar_url ? 'Présente' : 'Initiales'}
+                </span>
+              </li>
+              <li className="flex items-center justify-between">
+                <span>Compétences ({candidat.competences?.length || 0})</span>
+                <span className="font-bold text-[#16a34a]">Prêt</span>
+              </li>
+              <li className="flex items-center justify-between">
+                <span>Expériences ({candidat.experiences?.length || 0})</span>
+                <span className="font-bold text-[#16a34a]">Prêt</span>
+              </li>
+              <li className="flex items-center justify-between">
+                <span>Formations ({candidat.formations?.length || 0})</span>
+                <span className="font-bold text-[#16a34a]">Prêt</span>
+              </li>
+              <li className="flex items-center justify-between">
+                <span>Langues ({candidat.langues?.length || 0})</span>
+                <span className="font-bold text-[#16a34a]">Prêt</span>
+              </li>
+            </ul>
 
             <button
               onClick={onNavigateToProfile}
-              className="w-full rounded-xl border border-[#e2e5ef] bg-[#fafbfc] py-2 text-center text-xs font-bold text-[#5547d7] hover:bg-[#f6f5ff] transition"
+              className="mt-3 w-full rounded-xl border border-[#e2e5ef] bg-[#fafbfc] py-2 text-center text-xs font-bold text-[#5547d7] hover:bg-[#f6f5ff] transition"
             >
               Modifier mes informations de profil →
             </button>
-          </div>
-
-          {/* Conseils pour un CV percutant */}
-          <div className="rounded-3xl border border-[#e3dfff] bg-gradient-to-br from-[#faf9fe] to-[#f4f2ff] p-6 shadow-xs text-xs space-y-3">
-            <div className="flex items-center gap-2 font-bold text-[#5547d7]">
-              <Sparkles size={16} /> Bonnes pratiques recrutement
-            </div>
-            <ul className="space-y-2 text-[11px] text-[#5e539d] leading-relaxed">
-              <li>• Privilégiez des verbes d'action précis dans vos expériences.</li>
-              <li>• Mettez en avant vos compétences techniques clés en tête de document.</li>
-              <li>• Utilisez un format PDF épuré pour assurer une lecture fluide sans bugs d'affichage.</li>
-              <li>• Conservez un CV à jour avant de postuler à de nouvelles offres.</li>
-            </ul>
           </div>
         </aside>
       </div>
@@ -547,7 +609,7 @@ export function MesCvsView({
       {/* MODAL PRÉVISUALISATION A4 DU CV */}
       {showPreviewModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
-          <div className="relative my-6 w-full max-w-4xl rounded-3xl bg-[#f0f2f7] p-5 shadow-2xl">
+          <div className="relative my-6 w-full max-w-4xl rounded-3xl bg-[#f0f2f7] p-5 shadow-2xl animate-in fade-in zoom-in-95">
             {/* Barre d'action supérieure */}
             <div className="mb-4 flex items-center justify-between rounded-2xl bg-white px-5 py-3 shadow-xs">
               <div className="flex items-center gap-3">
@@ -581,15 +643,33 @@ export function MesCvsView({
               id="printable-cv"
               className="mx-auto max-w-[800px] min-h-[920px] bg-white p-10 rounded-2xl shadow-xl text-[#1e2538] font-sans"
             >
-              {/* EN-TÊTE DU CV SELON LE MODÈLE */}
+              {/* EN-TÊTE DU CV */}
               <div className="border-b-4 pb-6" style={{ borderColor: cvAccentColor }}>
                 <div className="flex justify-between items-start">
-                  <div>
-                    <h1 className="text-3xl font-black tracking-tight" style={{ color: cvAccentColor }}>
-                      {candidat.user?.prenom || 'Amina'} {candidat.user?.nom || 'Ben Salem'}
-                    </h1>
-                    <div className="text-sm font-bold text-[#474f63] mt-1">
-                      {candidat.titre || 'Développeuse Web Full Stack'}
+                  <div className="flex items-center gap-4">
+                    {showPhotoOnCv && (
+                      <div className="size-20 rounded-2xl overflow-hidden border-2 border-white shadow-md bg-[#594be0] shrink-0">
+                        {candidat.avatar_url || candidat.user?.avatar_url ? (
+                          <img
+                            src={candidat.avatar_url || candidat.user?.avatar_url}
+                            alt={`${candidat.user?.prenom} ${candidat.user?.nom}`}
+                            className="size-full object-cover"
+                          />
+                        ) : (
+                          <div className="grid size-full place-items-center text-white font-black text-2xl">
+                            {candidat.user?.prenom?.[0] || 'A'}
+                            {candidat.user?.nom?.[0] || 'B'}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div>
+                      <h1 className="text-3xl font-black tracking-tight" style={{ color: cvAccentColor }}>
+                        {candidat.user?.prenom || 'Amina'} {candidat.user?.nom || 'Ben Salem'}
+                      </h1>
+                      <div className="text-sm font-bold text-[#474f63] mt-1">
+                        {candidat.titre || 'Développeuse Web Full Stack'}
+                      </div>
                     </div>
                   </div>
 

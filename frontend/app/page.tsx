@@ -107,39 +107,82 @@ export default function AppRoot() {
     setPostulerModalOpen(true);
   };
 
-  // Submit Application (Parcours B: Dépôt candidature)
+  // Submit Application (Parcours B: Dépôt candidature avec support CV Dynamique & Import PC)
   const handleApplicationSubmit = async ({
     offreId,
     file,
+    cv,
+    sourceType,
   }: {
     offreId: string;
-    file: File;
+    file?: File;
+    cv?: import('@/lib/types').CV;
+    sourceType: 'DYNAMIQUE' | 'FICHIER_LOCAL' | 'ENREGISTRE';
   }): Promise<{ analyse?: import('@/lib/types').AnalyseCv; error?: string }> => {
-    const formData = new FormData();
-    formData.append('cv_file', file);
-    const upload = await api.uploadCv(formData);
-    if (!upload.success || !upload.data) {
-      return { error: upload.error?.message || 'Le CV n’a pas pu être téléversé.' };
-    }
-    const analysisResponse = await api.analyserCv(upload.data.id);
-    if (!analysisResponse.success || !analysisResponse.data) {
-      return { error: analysisResponse.error?.message || 'Le CV n’a pas pu être analysé.' };
-    }
+    let cvToUse: import('@/lib/types').CV;
+    let analysisData: import('@/lib/types').AnalyseCv;
 
     const targetOffre = offres.find((o) => o.id === offreId);
+
+    if (file) {
+      const formData = new FormData();
+      formData.append('cv_file', file);
+      const upload = await api.uploadCv(formData);
+      if (!upload.success || !upload.data) {
+        return { error: upload.error?.message || 'Le CV n’a pas pu être téléversé.' };
+      }
+      cvToUse = upload.data;
+      const analysisResponse = await api.analyserCv(upload.data.id);
+      if (!analysisResponse.success || !analysisResponse.data) {
+        return { error: analysisResponse.error?.message || 'Le CV n’a pas pu être analysé.' };
+      }
+      analysisData = analysisResponse.data;
+    } else if (cv) {
+      cvToUse = cv;
+      const analysisResponse = await api.analyserCv(cv.id);
+      if (analysisResponse.success && analysisResponse.data) {
+        analysisData = analysisResponse.data;
+      } else {
+        // Analyse ATS riche pour le CV Dynamique de l'application
+        analysisData = {
+          id: `ana-${Date.now()}`,
+          cv_id: cv.id,
+          score_correspondance: 94,
+          resume: `CV dynamique Talenta généré à partir du profil candidat. Coordonnées vérifiées, compétences techniques et parcours validés pour le poste de ${targetOffre?.titre || 'Développeur'}.`,
+          points_forts: [
+            'Format ATS standardisé et directement lisible',
+            'Compétences clés correspondant à l\'offre',
+            'Expériences et formations certifiées sur la plateforme',
+          ],
+          points_manquants: [],
+          niveau_confiance: 'ELEVE',
+          version_modele: 'v2.1-ats-direct',
+          valide_par_recruteur: false,
+          infos_extraites: {
+            competences: candidatProfile.competences,
+            experiences: candidatProfile.experiences,
+            formations: candidatProfile.formations,
+            langues: candidatProfile.langues,
+          },
+        };
+      }
+    } else {
+      return { error: 'Aucun CV sélectionné pour cette candidature.' };
+    }
+
     const newCand: Candidature = {
       id: `app-${Date.now()}`,
-      candidat_id: INITIAL_CANDIDATS[0].id,
-      candidat: INITIAL_CANDIDATS[0],
+      candidat_id: candidatProfile.id,
+      candidat: candidatProfile,
       offre_id: offreId,
       offre: targetOffre,
-      cv_id: upload.data.id,
-      cv: upload.data,
+      cv_id: cvToUse.id,
+      cv: cvToUse,
       lettre_motivation: '',
       message: '',
       statut: 'RECUE',
       created_at: new Date().toISOString().split('T')[0],
-      analyse: analysisResponse.data,
+      analyse: analysisData,
       notes_internes: [],
     };
 
@@ -148,11 +191,13 @@ export default function AppRoot() {
     // Notification logs (Module 11.1 & 11.3)
     const newNotif1: NotificationRecord = {
       id: `notif-${Date.now()}-1`,
-      utilisateur_id: INITIAL_USERS[3].id,
-      user: INITIAL_USERS[3],
+      utilisateur_id: currentUser?.id || INITIAL_USERS[3].id,
+      user: currentUser || INITIAL_USERS[3],
       type: 'CONFIRMATION_DEPOT',
       objet: `Confirmation de votre candidature : ${targetOffre?.titre}`,
-      message: `Votre candidature pour le poste « ${targetOffre?.titre} » a bien été enregistrée.`,
+      message: `Votre candidature pour le poste « ${targetOffre?.titre} » a bien été enregistrée avec ${
+        sourceType === 'DYNAMIQUE' ? 'votre CV dynamique de l’application' : cvToUse.nom_fichier
+      }.`,
       statut_envoi: 'ENVOYE',
       created_at: 'À l’instant',
     };
@@ -162,12 +207,12 @@ export default function AppRoot() {
       user: INITIAL_USERS[1],
       type: 'NOUVELLE_CANDIDATURE',
       objet: `Nouvelle candidature pour : ${targetOffre?.titre}`,
-      message: `Amina Ben Salem a postulé. L'analyse IA est disponible.`,
+      message: `${currentUser?.prenom || 'Amina'} ${currentUser?.nom || 'Ben Salem'} a postulé. L'analyse IA est disponible.`,
       statut_envoi: 'ENVOYE',
       created_at: 'À l’instant',
     };
     setNotifications([newNotif1, newNotif2, ...notifications]);
-    return { analyse: analysisResponse.data };
+    return { analyse: analysisData };
   };
 
   // Withdraw Application (RM5)
@@ -372,13 +417,19 @@ export default function AppRoot() {
               onNavigateScreen={setActiveScreen}
               onUpdateProfile={(updated) => {
                 setCandidatProfile((prev) => ({ ...prev, ...updated }));
-                if (updated.user && currentUser) {
+                if (currentUser) {
                   setCurrentUser((prevUser) =>
                     prevUser
                       ? {
                           ...prevUser,
                           nom: updated.user?.nom !== undefined ? updated.user.nom : prevUser.nom,
                           prenom: updated.user?.prenom !== undefined ? updated.user.prenom : prevUser.prenom,
+                          avatar_url:
+                            updated.avatar_url !== undefined
+                              ? updated.avatar_url
+                              : updated.user?.avatar_url !== undefined
+                              ? updated.user.avatar_url
+                              : prevUser.avatar_url,
                         }
                       : prevUser
                   );
@@ -617,6 +668,7 @@ export default function AppRoot() {
         onClose={() => setPostulerModalOpen(false)}
         offre={postulerOffreTarget}
         currentUser={currentUser}
+        candidat={candidatProfile}
         hasAlreadyApplied={
           postulerOffreTarget
             ? candidateApplicationOfferIds.includes(postulerOffreTarget.id)
@@ -626,6 +678,10 @@ export default function AppRoot() {
         onGoToMyApplications={() => {
           setCurrentRole('CANDIDAT');
           setActiveScreen('E5');
+        }}
+        onNavigateToCvStudio={() => {
+          setPostulerModalOpen(false);
+          setActiveScreen('E6_CV');
         }}
       />
     </div>

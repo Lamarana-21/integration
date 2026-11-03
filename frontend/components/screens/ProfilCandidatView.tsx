@@ -1,29 +1,36 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   AlertCircle,
   Award,
   Briefcase,
   Building2,
   Calendar,
+  Camera,
   Check,
   CheckCircle2,
   Clock,
   Compass,
   Edit3,
+  ExternalLink,
   Eye,
+  FileText,
   GraduationCap,
+  Image as ImageIcon,
   Languages,
   Lock,
+  Mail,
   MapPin,
   Phone,
   Plus,
   Save,
   Shield,
+  ShieldCheck,
   Sliders,
   Sparkles,
   Trash2,
+  Upload,
   User,
   X,
 } from 'lucide-react';
@@ -35,6 +42,25 @@ interface ProfilCandidatViewProps {
   onDeleteMyData: () => void;
   onNavigateScreen?: (screen: string) => void;
 }
+
+const PRESET_AVATARS = [
+  {
+    name: 'Tech Féminin',
+    url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=256',
+  },
+  {
+    name: 'Pro Moderne',
+    url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=256',
+  },
+  {
+    name: 'Tech Masculin',
+    url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256',
+  },
+  {
+    name: 'Ingénieur Studio',
+    url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=256',
+  },
+];
 
 const POPULAR_SKILLS = [
   'React',
@@ -66,6 +92,13 @@ export function ProfilCandidatView({
   onDeleteMyData,
   onNavigateScreen,
 }: ProfilCandidatViewProps) {
+  // Photo de profil
+  const [avatarUrl, setAvatarUrl] = useState<string>(
+    candidat.avatar_url || candidat.user?.avatar_url || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=256'
+  );
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
   // Nom & Prénom synchronisés immédiatement avec le parent et la Navbar
   const [nom, setNom] = useState(candidat.user?.nom || 'Ben Salem');
   const [prenom, setPrenom] = useState(candidat.user?.prenom || 'Amina');
@@ -76,7 +109,7 @@ export function ProfilCandidatView({
   const [email] = useState(candidat.user?.email || 'amina@mail.example');
   const [linkedinUrl, setLinkedinUrl] = useState(candidat.linkedin_url || 'https://linkedin.com/in/amina-bensalem');
   const [githubUrl, setGithubUrl] = useState(candidat.github_url || 'https://github.com/aminabs');
-  const [portfolioUrl, setPortfolioUrl] = useState(candidat.portfolio_url || 'https://amina.dev');
+  const [portfolioUrl, setPortfolioUrl] = useState(candidat.portfolio_url || 'https://amina-dev.portfolio.tn');
   const [resume, setResume] = useState(candidat.resume || '');
 
   // Statut de recherche & préférences
@@ -141,6 +174,75 @@ export function ProfilCandidatView({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
 
+  // Gestion dynamique de la photo de profil
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 3 * 1024 * 1024) {
+      alert('La photo ne doit pas dépasser 3 Mo.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        setAvatarUrl(dataUrl);
+        onUpdateProfile({
+          avatar_url: dataUrl,
+          user: {
+            ...(candidat.user || {
+              id: candidat.utilisateur_id,
+              email,
+              statut: 'ACTIF',
+            }),
+            nom,
+            prenom,
+            avatar_url: dataUrl,
+          },
+        });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSelectPresetAvatar = (url: string) => {
+    setAvatarUrl(url);
+    setShowAvatarPicker(false);
+    onUpdateProfile({
+      avatar_url: url,
+      user: {
+        ...(candidat.user || {
+          id: candidat.utilisateur_id,
+          email,
+          statut: 'ACTIF',
+        }),
+        nom,
+        prenom,
+        avatar_url: url,
+      },
+    });
+  };
+
+  const handleRemovePhoto = () => {
+    setAvatarUrl('');
+    setShowAvatarPicker(false);
+    onUpdateProfile({
+      avatar_url: '',
+      user: {
+        ...(candidat.user || {
+          id: candidat.utilisateur_id,
+          email,
+          statut: 'ACTIF',
+        }),
+        nom,
+        prenom,
+        avatar_url: '',
+      },
+    });
+  };
+
   // Synchronisation dynamique du Nom & Prénom en temps réel vers le parent et la Navbar
   const handleNomChange = (newVal: string) => {
     setNom(newVal);
@@ -148,13 +250,12 @@ export function ProfilCandidatView({
       user: {
         ...(candidat.user || {
           id: candidat.utilisateur_id,
-          email: 'amina@mail.example',
+          email,
           statut: 'ACTIF',
-          created_at: '',
-          updated_at: '',
         }),
         nom: newVal,
         prenom,
+        avatar_url: avatarUrl,
       },
     });
   };
@@ -165,13 +266,12 @@ export function ProfilCandidatView({
       user: {
         ...(candidat.user || {
           id: candidat.utilisateur_id,
-          email: 'amina@mail.example',
+          email,
           statut: 'ACTIF',
-          created_at: '',
-          updated_at: '',
         }),
         nom,
         prenom: newVal,
+        avatar_url: avatarUrl,
       },
     });
   };
@@ -179,7 +279,8 @@ export function ProfilCandidatView({
   // Calcul dynamique de la complétude du profil basé uniquement sur les informations du profil
   const completenessScore = useMemo(() => {
     let score = 0;
-    if (nom.trim() && prenom.trim()) score += 20;
+    if (avatarUrl) score += 10;
+    if (nom.trim() && prenom.trim()) score += 15;
     if (titre.trim()) score += 10;
     if (telephone.trim() && ville.trim()) score += 15;
     if (resume.trim() && resume.trim().length > 20) score += 15;
@@ -187,7 +288,16 @@ export function ProfilCandidatView({
     if (experiences.length > 0) score += 15;
     if (formations.length > 0) score += 10;
     return Math.min(100, score);
-  }, [nom, prenom, titre, telephone, ville, resume, competences, experiences, formations]);
+  }, [avatarUrl, nom, prenom, titre, telephone, ville, resume, competences, experiences, formations]);
+
+  // Indicateur de force du mot de passe
+  const passwordStrength = useMemo(() => {
+    if (!newPassword) return 0;
+    let strength = 1;
+    if (newPassword.length >= 8) strength++;
+    if (/[0-9]/.test(newPassword) && /[A-Z]/.test(newPassword)) strength++;
+    return strength;
+  }, [newPassword]);
 
   // Compétences
   const handleAddSkill = (skillToAdd?: string) => {
@@ -269,6 +379,7 @@ export function ProfilCandidatView({
   // Sauvegarde globale du profil
   const handleSaveProfile = () => {
     onUpdateProfile({
+      avatar_url: avatarUrl,
       titre,
       telephone,
       ville,
@@ -289,13 +400,12 @@ export function ProfilCandidatView({
       user: {
         ...(candidat.user || {
           id: candidat.utilisateur_id,
-          email: 'amina@mail.example',
+          email,
           statut: 'ACTIF',
-          created_at: '',
-          updated_at: '',
         }),
         nom,
         prenom,
+        avatar_url: avatarUrl,
       },
     });
     setSaveSuccess(true);
@@ -331,23 +441,53 @@ export function ProfilCandidatView({
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 space-y-6">
       {saveSuccess && (
-        <div className="fixed top-20 right-6 z-50 flex items-center gap-3 rounded-2xl border border-[#bbf7d0] bg-[#f0fdf4] px-5 py-3 text-xs font-bold text-[#166534] shadow-xl">
+        <div className="fixed top-20 right-6 z-50 flex items-center gap-3 rounded-2xl border border-[#bbf7d0] bg-[#f0fdf4] px-5 py-3 text-xs font-bold text-[#166534] shadow-xl animate-in slide-in-from-top-4">
           <CheckCircle2 size={18} className="text-[#16a34a]" />
-          <span>Profil candidat et modifications enregistrés avec succès !</span>
+          <span>Profil candidat et informations du compte enregistrés avec succès !</span>
         </div>
       )}
 
-      {/* TOP CANDIDATE HERO BANNER */}
-      <div className="rounded-3xl border border-[#e8ebf3] bg-gradient-to-r from-white via-[#fafbfe] to-[#f4f2ff] p-6 shadow-xs">
+      {/* TOP CANDIDATE HERO BANNER DYNAMIQUE AVEC PHOTO */}
+      <div className="rounded-3xl border border-[#e8ebf3] bg-gradient-to-r from-white via-[#fafbfe] to-[#f4f2ff] p-6 sm:p-7 shadow-xs">
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="grid size-20 place-items-center rounded-3xl bg-[#594be0] text-2xl font-black text-white shadow-lg shadow-[#594be0]/25">
-              {prenom[0] || 'A'}
-              {nom[0] || 'B'}
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
+            {/* PHOTO DE PROFIL INTERACTIVE */}
+            <div className="relative group shrink-0">
+              <div className="size-24 rounded-3xl overflow-hidden border-2 border-white shadow-xl shadow-[#594be0]/15 bg-[#594be0] relative">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={`${prenom} ${nom}`}
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <div className="grid size-full place-items-center text-3xl font-black text-white">
+                    {prenom[0] || 'A'}
+                    {nom[0] || 'B'}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowAvatarPicker(true)}
+                  className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 transition duration-200 text-[10px] font-bold gap-1"
+                >
+                  <Camera size={18} />
+                  <span>Modifier</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAvatarPicker(true)}
+                className="absolute -bottom-1 -right-1 grid size-7 place-items-center rounded-full bg-[#594be0] text-white shadow-md hover:bg-[#4739d2] transition"
+                title="Changer la photo de profil"
+              >
+                <Camera size={13} />
+              </button>
             </div>
 
             <div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
                 <h1 className="text-2xl font-black text-[#171f33]">
                   {prenom} {nom}
                 </h1>
@@ -355,31 +495,43 @@ export function ProfilCandidatView({
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-[11px] font-bold ${
                     statutRecherche === 'EN_RECHERCHE'
                       ? 'bg-[#dcfce7] text-[#15803d]'
-                      : 'bg-[#fef3c7] text-[#b45309]'
+                      : statutRecherche === 'A_LECOUTE'
+                      ? 'bg-[#fef3c7] text-[#b45309]'
+                      : 'bg-[#f1f5f9] text-[#475569]'
                   }`}
                 >
                   <span className="size-2 rounded-full bg-current" />
-                  {statutRecherche === 'EN_RECHERCHE' ? 'En recherche active' : 'À l’écoute'}
+                  {statutRecherche === 'EN_RECHERCHE'
+                    ? 'En recherche active'
+                    : statutRecherche === 'A_LECOUTE'
+                    ? 'À l’écoute d\'opportunités'
+                    : 'Non disponible'}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#eef2ff] px-2.5 py-0.5 text-[10px] font-bold text-[#4338ca]">
+                  <ShieldCheck size={12} /> Compte actif
                 </span>
               </div>
 
               <p className="mt-1 text-sm font-semibold text-[#594be0]">{titre}</p>
 
-              <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-[#6e7790]">
+              <div className="mt-2.5 flex flex-wrap items-center justify-center sm:justify-start gap-4 text-xs text-[#6e7790]">
                 <span className="flex items-center gap-1.5">
-                  <MapPin size={13} /> {ville}, {pays}
+                  <Mail size={13} className="text-[#594be0]" /> {email}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <Clock size={13} /> Disponibilité : <strong className="text-[#1e2538]">{disponibilite}</strong>
+                  <Phone size={13} className="text-[#594be0]" /> {telephone}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <Briefcase size={13} /> {typeContratSouhaite.join(', ')} · {teletravailSouhaite}
+                  <MapPin size={13} className="text-[#594be0]" /> {ville}, {pays}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Clock size={13} className="text-[#594be0]" /> Dispo : <strong className="text-[#1e2538]">{disponibilite}</strong>
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-center gap-2.5">
             <button
               onClick={() => setShowPublicPreview(true)}
               className="flex items-center gap-1.5 rounded-2xl border border-[#d8dce8] bg-white px-4 py-2.5 text-xs font-bold text-[#424b61] shadow-xs hover:bg-[#f6f7fb] transition"
@@ -398,7 +550,7 @@ export function ProfilCandidatView({
 
       {/* 2 COLUMNS GRID */}
       <div className="grid gap-8 lg:grid-cols-[320px_1fr]">
-        {/* LEFT COLUMN: WIDGETS */}
+        {/* LEFT COLUMN: WIDGETS & STATUT */}
         <aside className="space-y-6">
           {/* Complétude du profil */}
           <div className="rounded-3xl border border-[#e8ebf3] bg-white p-6 shadow-xs">
@@ -413,7 +565,7 @@ export function ProfilCandidatView({
               />
             </div>
             <p className="mt-2.5 text-[11px] text-[#788299] leading-relaxed">
-              Un profil renseigné à plus de 80% multiplie considérablement vos opportunités d'entretien.
+              Un profil renseigné à plus de 80% multiplie considérablement vos opportunités d'entretien auprès des recruteurs.
             </p>
           </div>
 
@@ -508,17 +660,22 @@ export function ProfilCandidatView({
           </div>
         </aside>
 
-        {/* RIGHT COLUMN: FORMS */}
+        {/* RIGHT COLUMN: COORDONNÉES DU COMPTE & FORMULAIRES */}
         <div className="space-y-6">
-          {/* 1. IDENTITÉ & COORDONNÉES */}
+          {/* 1. COORDONNÉES DU COMPTE & IDENTITÉ */}
           <section className="rounded-3xl border border-[#e8ebf3] bg-white p-6 sm:p-7 shadow-xs">
-            <h2 className="text-sm font-extrabold text-[#171f33] flex items-center gap-2 mb-4">
-              <User size={16} className="text-[#594be0]" /> Identité & Coordonnées
-            </h2>
+            <div className="flex items-center justify-between border-b border-[#f0f2f7] pb-3 mb-4">
+              <h2 className="text-sm font-extrabold text-[#171f33] flex items-center gap-2">
+                <User size={16} className="text-[#594be0]" /> Coordonnées du compte & Identité
+              </h2>
+              <span className="text-[11px] font-bold text-[#16a34a] bg-[#f0fdf4] border border-[#bbf7d0] px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                <ShieldCheck size={12} /> Compte actif
+              </span>
+            </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="text-xs font-bold text-[#353d52]">Nom (se met à jour en direct en haut)</label>
+                <label className="text-xs font-bold text-[#353d52]">Nom (synchronisé en temps réel)</label>
                 <input
                   type="text"
                   value={nom}
@@ -528,7 +685,7 @@ export function ProfilCandidatView({
               </div>
 
               <div>
-                <label className="text-xs font-bold text-[#353d52]">Prénom (se met à jour en direct en haut)</label>
+                <label className="text-xs font-bold text-[#353d52]">Prénom (synchronisé en temps réel)</label>
                 <input
                   type="text"
                   value={prenom}
@@ -548,22 +705,27 @@ export function ProfilCandidatView({
               </div>
 
               <div>
+                <label className="text-xs font-bold text-[#353d52]">Adresse Email du compte</label>
+                <div className="relative mt-1.5">
+                  <input
+                    type="email"
+                    value={email}
+                    disabled
+                    className="w-full rounded-xl border border-[#e2e5ef] bg-[#f5f6fa] px-3.5 py-2.5 text-xs text-[#626c83] outline-none cursor-not-allowed"
+                  />
+                  <span className="absolute right-3 top-2.5 text-[10px] font-bold text-[#16a34a]">
+                    Vérifié
+                  </span>
+                </div>
+              </div>
+
+              <div>
                 <label className="text-xs font-bold text-[#353d52]">Téléphone</label>
                 <input
                   type="text"
                   value={telephone}
                   onChange={(e) => setTelephone(e.target.value)}
                   className="mt-1.5 w-full rounded-xl border border-[#e2e5ef] bg-[#fafbfc] px-3.5 py-2.5 text-xs text-[#1e2538] outline-none focus:border-[#6355e8] focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-[#353d52]">Email (non modifiable)</label>
-                <input
-                  type="email"
-                  value={email}
-                  disabled
-                  className="mt-1.5 w-full rounded-xl border border-[#e2e5ef] bg-[#f0f2f7] px-3.5 py-2.5 text-xs text-[#717b92] outline-none cursor-not-allowed"
                 />
               </div>
 
@@ -587,11 +749,19 @@ export function ProfilCandidatView({
                 />
               </div>
 
+              {/* Liens Réseaux */}
               <div className="sm:col-span-2 pt-2 border-t border-[#f0f2f7]">
-                <span className="text-xs font-bold text-[#353d52] block mb-2">Liens & Réseaux professionnels</span>
+                <span className="text-xs font-bold text-[#353d52] block mb-2">Réseaux & Liens professionnels</span>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div>
-                    <label className="text-[11px] font-semibold text-[#667087]">LinkedIn</label>
+                    <label className="text-[11px] font-semibold text-[#667087] flex items-center justify-between">
+                      <span>LinkedIn</span>
+                      {linkedinUrl && (
+                        <a href={linkedinUrl} target="_blank" rel="noreferrer" className="text-[#594be0] hover:underline flex items-center gap-0.5">
+                          <ExternalLink size={11} />
+                        </a>
+                      )}
+                    </label>
                     <input
                       type="url"
                       value={linkedinUrl}
@@ -600,8 +770,16 @@ export function ProfilCandidatView({
                       className="mt-1 w-full rounded-xl border border-[#e2e5ef] bg-[#fafbfc] px-3 py-2 text-xs outline-none focus:border-[#594be0]"
                     />
                   </div>
+
                   <div>
-                    <label className="text-[11px] font-semibold text-[#667087]">GitHub</label>
+                    <label className="text-[11px] font-semibold text-[#667087] flex items-center justify-between">
+                      <span>GitHub</span>
+                      {githubUrl && (
+                        <a href={githubUrl} target="_blank" rel="noreferrer" className="text-[#594be0] hover:underline flex items-center gap-0.5">
+                          <ExternalLink size={11} />
+                        </a>
+                      )}
+                    </label>
                     <input
                       type="url"
                       value={githubUrl}
@@ -610,13 +788,21 @@ export function ProfilCandidatView({
                       className="mt-1 w-full rounded-xl border border-[#e2e5ef] bg-[#fafbfc] px-3 py-2 text-xs outline-none focus:border-[#594be0]"
                     />
                   </div>
+
                   <div>
-                    <label className="text-[11px] font-semibold text-[#667087]">Portfolio / Site web</label>
+                    <label className="text-[11px] font-semibold text-[#667087] flex items-center justify-between">
+                      <span>Portfolio personnel</span>
+                      {portfolioUrl && (
+                        <a href={portfolioUrl} target="_blank" rel="noreferrer" className="text-[#594be0] hover:underline flex items-center gap-0.5">
+                          <ExternalLink size={11} />
+                        </a>
+                      )}
+                    </label>
                     <input
                       type="url"
                       value={portfolioUrl}
                       onChange={(e) => setPortfolioUrl(e.target.value)}
-                      placeholder="https://monsite.dev"
+                      placeholder="https://mon-portfolio.tn"
                       className="mt-1 w-full rounded-xl border border-[#e2e5ef] bg-[#fafbfc] px-3 py-2 text-xs outline-none focus:border-[#594be0]"
                     />
                   </div>
@@ -625,18 +811,18 @@ export function ProfilCandidatView({
             </div>
           </section>
 
-          {/* 2. SÉCURITÉ & MODIFICATION DU MOT DE PASSE */}
+          {/* 2. SÉCURITÉ & MODIFICATION DU MOT DE PASSE DU COMPTE */}
           <section className="rounded-3xl border border-[#e8ebf3] bg-white p-6 sm:p-7 shadow-xs">
             <div className="flex items-center justify-between border-b border-[#f0f2f7] pb-3 mb-4">
               <h2 className="text-sm font-extrabold text-[#171f33] flex items-center gap-2">
-                <Lock size={16} className="text-[#594be0]" /> Sécurité & Modification du mot de passe
+                <Lock size={16} className="text-[#594be0]" /> Sécurité & Mot de passe du compte
               </h2>
-              <span className="text-[11px] text-[#7d869e]">Min. 8 caractères</span>
+              <span className="text-[11px] text-[#7d869e]">Minimum 8 caractères</span>
             </div>
 
             {passwordSuccess && (
               <div className="mb-4 flex items-center gap-2 rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] p-3 text-xs font-bold text-[#166534]">
-                <CheckCircle2 size={16} /> Mot de passe modifié avec succès !
+                <CheckCircle2 size={16} /> Mot de passe mis à jour avec succès !
               </div>
             )}
 
@@ -668,6 +854,25 @@ export function ProfilCandidatView({
                     placeholder="Min. 8 caractères"
                     className="mt-1.5 w-full rounded-xl border border-[#e2e5ef] bg-[#fafbfc] px-3.5 py-2.5 text-xs text-[#1e2538] outline-none focus:border-[#6355e8] focus:bg-white"
                   />
+                  {/* Jauge de force */}
+                  {newPassword && (
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <div className="h-1 flex-1 rounded-full bg-[#e2e5ef] overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 ${
+                            passwordStrength === 1
+                              ? 'w-1/3 bg-[#ef4444]'
+                              : passwordStrength === 2
+                              ? 'w-2/3 bg-[#f59e0b]'
+                              : 'w-full bg-[#10b981]'
+                          }`}
+                        />
+                      </div>
+                      <span className="text-[10px] font-bold text-[#626c83]">
+                        {passwordStrength === 1 ? 'Court' : passwordStrength === 2 ? 'Moyen' : 'Robuste'}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -690,7 +895,7 @@ export function ProfilCandidatView({
                     onChange={(e) => setShowPassword(e.target.checked)}
                     className="rounded text-[#594be0]"
                   />
-                  Afficher les mots de passe
+                  Afficher les caractères
                 </label>
 
                 <button
@@ -707,7 +912,7 @@ export function ProfilCandidatView({
           <section className="rounded-3xl border border-[#e8ebf3] bg-white p-6 sm:p-7 shadow-xs">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-extrabold text-[#171f33] flex items-center gap-2">
-                <User size={16} className="text-[#594be0]" /> Résumé professionnel
+                <FileText size={16} className="text-[#594be0]" /> Résumé professionnel
               </h2>
               <button
                 type="button"
@@ -928,6 +1133,92 @@ export function ProfilCandidatView({
         </div>
       </div>
 
+      {/* MODAL GESTION PHOTO DE PROFIL & AVATARS */}
+      {showAvatarPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h4 className="text-base font-black text-[#171f33] flex items-center gap-2">
+                <Camera size={18} className="text-[#594be0]" /> Photo de profil & Avatar
+              </h4>
+              <button onClick={() => setShowAvatarPicker(false)} className="text-[#8e98af] hover:text-[#171f33]">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Aperçu actuel */}
+            <div className="flex items-center gap-4 bg-[#fafbfc] p-4 rounded-2xl border border-[#edf0f7]">
+              <div className="size-16 rounded-2xl overflow-hidden bg-[#594be0] grid place-items-center text-white font-black text-xl shrink-0">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Aperçu" className="size-full object-cover" />
+                ) : (
+                  <span>{prenom[0]}{nom[0]}</span>
+                )}
+              </div>
+              <div className="text-xs">
+                <div className="font-bold text-[#1a2233]">Photo actuellement affichée</div>
+                <div className="text-[#7d869e] text-[11px] mt-0.5">Visible sur votre profil et votre CV dynamique</div>
+              </div>
+            </div>
+
+            {/* Option 1: Téléverser depuis le PC */}
+            <div>
+              <label className="font-bold text-xs text-[#353d52] block mb-2">Importer une photo depuis votre PC</label>
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#594be0] bg-[#f8f7ff] p-3 text-xs font-bold text-[#594be0] hover:bg-[#f0edff] transition"
+              >
+                <Upload size={16} /> Choisir un fichier (PNG, JPG, max 3 Mo)
+              </button>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  handlePhotoUpload(e);
+                  setShowAvatarPicker(false);
+                }}
+              />
+            </div>
+
+            {/* Option 2: Avatars prédéfinis */}
+            <div>
+              <label className="font-bold text-xs text-[#353d52] block mb-2">Ou choisir un avatar stylisé</label>
+              <div className="grid grid-cols-4 gap-2">
+                {PRESET_AVATARS.map((av, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSelectPresetAvatar(av.url)}
+                    className="group relative rounded-xl overflow-hidden border-2 border-transparent hover:border-[#594be0] transition aspect-square"
+                  >
+                    <img src={av.url} alt={av.name} className="size-full object-cover" />
+                    <span className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-bold transition">
+                      Choisir
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Option 3: Supprimer */}
+            {avatarUrl && (
+              <div className="pt-2 border-t border-[#f0f2f7]">
+                <button
+                  type="button"
+                  onClick={handleRemovePhoto}
+                  className="w-full text-center text-xs font-bold text-[#cf3b3b] hover:underline"
+                >
+                  Supprimer la photo (utiliser les initiales)
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* MODAL AJOUT / ÉDITION EXPÉRIENCE */}
       {showExpModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
@@ -1072,9 +1363,13 @@ export function ProfilCandidatView({
                 <X size={18} />
               </button>
             </div>
-            <div className="flex items-center gap-3 bg-[#fafbfc] p-3.5 rounded-2xl border border-[#edf0f7]">
-              <div className="grid size-12 place-items-center rounded-xl bg-[#594be0] text-lg font-black text-white">
-                {prenom[0]}{nom[0]}
+            <div className="flex items-center gap-3.5 bg-[#fafbfc] p-4 rounded-2xl border border-[#edf0f7]">
+              <div className="size-14 rounded-2xl overflow-hidden bg-[#594be0] grid place-items-center text-white font-black text-lg shrink-0">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt={`${prenom} ${nom}`} className="size-full object-cover" />
+                ) : (
+                  <span>{prenom[0]}{nom[0]}</span>
+                )}
               </div>
               <div>
                 <div className="font-extrabold text-[#171f33] text-sm">{prenom} {nom}</div>

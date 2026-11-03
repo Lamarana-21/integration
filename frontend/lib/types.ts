@@ -49,6 +49,7 @@ export interface User {
   statut: UserStatus;
   derniere_connexion?: string;
   candidat?: Candidat;
+  avatar_url?: string;
 }
 
 export interface Experience {

@@ -69,10 +69,18 @@ export function Navbar({
                 onClick={() => setProfileOpen((open) => !open)}
                 className="flex items-center gap-2 rounded-xl p-1.5 hover:bg-[#f6f7fb]"
               >
-                <div className="grid size-8 place-items-center rounded-full bg-[#e9e6fd] text-xs font-extrabold text-[#5547d7]">
-                  {currentUser.prenom?.[0] ?? 'U'}
-                  {currentUser.nom?.[0] ?? ''}
-                </div>
+                {currentUser.avatar_url ? (
+                  <img
+                    src={currentUser.avatar_url}
+                    alt={`${currentUser.prenom} ${currentUser.nom}`}
+                    className="size-8 rounded-full object-cover border border-[#e2e5ef]"
+                  />
+                ) : (
+                  <div className="grid size-8 place-items-center rounded-full bg-[#e9e6fd] text-xs font-extrabold text-[#5547d7]">
+                    {currentUser.prenom?.[0] ?? 'U'}
+                    {currentUser.nom?.[0] ?? ''}
+                  </div>
+                )}
                 <div className="hidden text-left sm:block">
                   <div className="text-xs font-bold text-[#1f2638]">
                     {currentUser.prenom} {currentUser.nom}
