@@ -28,17 +28,20 @@ class RolePermissionController extends Controller
         $validated = $request->validate([
             'nom' => 'required|string|unique:roles,nom|max:50',
             'description' => 'nullable|string',
-            'permission_ids' => 'nullable|array',
-            'permission_ids.*' => 'uuid|exists:permissions,id',
         ]);
 
         $role = Role::create([
-            'nom' => strtoupper($validated['nom']),
+            'nom' => strtoupper(trim($validated['nom'])),
             'description' => $validated['description'] ?? null,
         ]);
 
-        if (!empty($validated['permission_ids'])) {
-            $role->permissions()->sync($validated['permission_ids']);
+        $rawPerms = $request->input('permission_ids') ?? $request->input('permissions') ?? [];
+        if (!empty($rawPerms) && is_array($rawPerms)) {
+            $validPermIds = Permission::whereIn('id', $rawPerms)
+                ->orWhereIn('nom', $rawPerms)
+                ->pluck('id')
+                ->toArray();
+            $role->permissions()->sync($validPermIds);
         }
 
         return response()->json([
@@ -48,14 +51,45 @@ class RolePermissionController extends Controller
     }
 
     /**
+     * Trouver un rôle par son ID ou son Nom
+     */
+    private function resolveRole(string $idOrName): Role
+    {
+        $role = Role::where('id', $idOrName)
+            ->orWhere('nom', strtoupper($idOrName))
+            ->first();
+
+        if (!$role && str_starts_with($idOrName, 'r-')) {
+            $cleaned = strtoupper(substr($idOrName, 2));
+            $role = Role::where('nom', $cleaned)->first();
+        }
+
+        if (!$role) {
+            abort(404, "Rôle [{$idOrName}] non trouvé");
+        }
+
+        return $role;
+    }
+
+    /**
+     * Module 2.1 : Consulter un rôle spécifique
+     */
+    public function showRole(string $id): JsonResponse
+    {
+        $role = $this->resolveRole($id)->load('permissions');
+
+        return response()->json(['role' => $role]);
+    }
+
+    /**
      * Module 2.1 : Modifier un rôle
      */
     public function updateRole(Request $request, string $id): JsonResponse
     {
-        $role = Role::findOrFail($id);
+        $role = $this->resolveRole($id);
 
         $validated = $request->validate([
-            'nom' => "sometimes|required|string|max:50|unique:roles,nom,{$id}",
+            'nom' => "sometimes|required|string|max:50|unique:roles,nom,{$role->id}",
             'description' => 'nullable|string',
         ]);
 
@@ -63,7 +97,7 @@ class RolePermissionController extends Controller
 
         return response()->json([
             'message' => 'Rôle mis à jour',
-            'role' => $role,
+            'role' => $role->load('permissions'),
         ]);
     }
 
@@ -72,7 +106,7 @@ class RolePermissionController extends Controller
      */
     public function deleteRole(string $id): JsonResponse
     {
-        $role = Role::findOrFail($id);
+        $role = $this->resolveRole($id);
 
         // Bloquer la suppression des rôles système majeurs
         if (in_array($role->nom, ['ADMIN', 'RECRUTEUR', 'CANDIDAT'])) {
@@ -102,17 +136,23 @@ class RolePermissionController extends Controller
      */
     public function updateRolePermissions(Request $request, string $roleId): JsonResponse
     {
-        $role = Role::findOrFail($roleId);
+        $role = $this->resolveRole($roleId);
 
-        $request->validate([
-            'permission_ids' => 'required|array',
-            'permission_ids.*' => 'uuid|exists:permissions,id',
-        ]);
+        $rawPerms = $request->input('permission_ids') ?? $request->input('permissions') ?? [];
+        if (!is_array($rawPerms)) {
+            $rawPerms = [];
+        }
 
-        $role->permissions()->sync($request->permission_ids);
+        // Résolution intelligente : accepter UUID ou nom de permission (ex: 'CREER_OFFRE')
+        $validPermIds = Permission::whereIn('id', $rawPerms)
+            ->orWhereIn('nom', $rawPerms)
+            ->pluck('id')
+            ->toArray();
+
+        $role->permissions()->sync($validPermIds);
 
         return response()->json([
-            'message' => 'Permissions du rôle mises à jour avec succès',
+            'message' => 'Permissions du rôle mises à jour avec succès (RM9)',
             'role' => $role->load('permissions'),
         ]);
     }

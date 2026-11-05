@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
+  Bell,
   BriefcaseBusiness,
   Building2,
   Calendar,
@@ -16,11 +17,13 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react';
-import { Candidature, Offre } from '@/lib/types';
+import { Candidature, NotificationRecord, Offre, User } from '@/lib/types';
 
 interface DashboardRecruteurViewProps {
   offres: Offre[];
   candidatures: Candidature[];
+  currentUser?: User | null;
+  notifications?: NotificationRecord[];
   onOpenNewJob: () => void;
   onOpenApplicationDetail: (candidature: Candidature) => void;
   onViewAllApplications: () => void;
@@ -31,17 +34,39 @@ interface DashboardRecruteurViewProps {
 export function DashboardRecruteurView({
   offres,
   candidatures,
+  currentUser,
+  notifications = [],
   onOpenNewJob,
   onOpenApplicationDetail,
   onViewAllApplications,
   onEditJob,
   onCloseJob,
 }: DashboardRecruteurViewProps) {
-  const companyJobs = offres.filter((o) => o.entreprise_id === 'c-alpha');
-  const activeJobs = companyJobs.filter((o) => o.statut === 'PUBLIEE');
+  const currentEntId = currentUser?.entreprise_id || currentUser?.entreprise?.id;
+  const currentEntNom = currentUser?.entreprise?.nom || 'Société partenaire';
+
+  // Offres rattachées au recruteur ou à son entreprise
+  const companyJobs = useMemo(() => {
+    const list = offres.filter((o: Offre) => {
+      if (currentEntId && (o.entreprise_id === currentEntId || o.entreprise?.id === currentEntId)) return true;
+      if (currentUser?.id && o.auteur_id === currentUser.id) return true;
+      if (o.entreprise_id === 'c-alpha' || o.entreprise_id === '01a16a74-f27b-738f-a948-0fb179d8aed4') return true;
+      return false;
+    });
+    return list.length > 0 ? list : offres;
+  }, [offres, currentEntId, currentUser]);
+
+  const activeJobs = companyJobs.filter((o: Offre) => o.statut === 'PUBLIEE');
 
   const pendingApps = candidatures.filter((c) => c.statut === 'RECUE');
   const interviewApps = candidatures.filter((c) => c.statut === 'ENTRETIEN');
+
+  // Notifications spécifiques aux candidatures et offres pour ce recruteur
+  const recruiterAlerts = useMemo(() => {
+    return notifications.filter(
+      (n) => n.type === 'NOUVELLE_CANDIDATURE' || n.utilisateur_id === currentUser?.id
+    );
+  }, [notifications, currentUser]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-8">
@@ -49,10 +74,10 @@ export function DashboardRecruteurView({
       <div className="flex flex-col justify-between gap-4 border-b border-[#eef1f7] pb-6 sm:flex-row sm:items-end">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-[#8a93a8] uppercase tracking-wider">
-            <Building2 size={15} /> Société Alpha · Sfax, Tunisie
+            <Building2 size={15} /> {currentEntNom} · Espace Recrutement
           </div>
           <h1 className="mt-1 text-2xl font-black text-[#171f33] sm:text-3xl">
-            Tableau de bord Recruteur (E7)
+            Tableau de bord Recruteur
           </h1>
           <p className="mt-1 text-xs text-[#7d869d]">
             Aperçu synthétique des candidatures, des offres en cours et de l'assistance IA.
@@ -63,7 +88,7 @@ export function DashboardRecruteurView({
           onClick={onOpenNewJob}
           className="flex items-center gap-2 rounded-2xl bg-[#594be0] px-5 py-3 text-xs font-extrabold text-white shadow-md shadow-[#594be0]/20 hover:bg-[#483ad3] transition w-fit"
         >
-          <Plus size={16} /> Nouvelle offre (E8)
+          <Plus size={16} /> Nouvelle offre
         </button>
       </div>
 
@@ -244,13 +269,13 @@ export function DashboardRecruteurView({
             >
               <div className="flex items-center gap-3">
                 <div className="grid size-10 place-items-center rounded-2xl bg-[#eeeaff] text-xs font-black text-[#594be0]">
-                  {cand.candidat?.user?.prenom?.[0] || 'C'}
-                  {cand.candidat?.user?.nom?.[0] || ''}
+                  {cand.candidat?.prenom?.[0] || cand.candidat?.user?.prenom?.[0] || 'C'}
+                  {cand.candidat?.nom?.[0] || cand.candidat?.user?.nom?.[0] || ''}
                 </div>
                 <div>
                   <div className="text-xs font-bold text-[#171f33]">
-                    {cand.candidat?.user?.prenom} {cand.candidat?.user?.nom} ·{' '}
-                    <span className="text-[#666f86] font-normal">{cand.offre?.titre}</span>
+                    {cand.candidat?.prenom || cand.candidat?.user?.prenom || 'Candidat'} {cand.candidat?.nom || cand.candidat?.user?.nom || ''} ·{' '}
+                    <span className="text-[#666f86] font-normal">{cand.offre?.titre || offres.find(o => o.id === cand.offre_id)?.titre || 'Offre d\'emploi'}</span>
                   </div>
                   <div className="text-[11px] text-[#8790a4]">
                     Envoyée le {cand.created_at} · Statut : {cand.statut}
@@ -272,7 +297,7 @@ export function DashboardRecruteurView({
                   onClick={() => onOpenApplicationDetail(cand)}
                   className="rounded-xl bg-[#594be0] px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-[#483ad3]"
                 >
-                  Ouvrir (E10)
+                  Ouvrir
                 </button>
               </div>
             </div>
@@ -280,13 +305,44 @@ export function DashboardRecruteurView({
         </div>
       </div>
 
-      {/* Mes Offres Section (E7) */}
+      {/* Alertes de candidatures reçues en temps réel */}
+      {recruiterAlerts.length > 0 && (
+        <div className="mt-8 rounded-3xl border border-[#e8ebf3] bg-gradient-to-r from-white via-[#fafbfe] to-[#f5f4ff] p-6 shadow-xs">
+          <div className="flex items-center justify-between border-b border-[#f0f2f7] pb-3">
+            <h3 className="text-sm font-extrabold text-[#171f33] flex items-center gap-2">
+              <Bell size={16} className="text-[#594be0]" /> Alertes de candidatures reçues ({recruiterAlerts.length})
+            </h3>
+            <button
+              onClick={onViewAllApplications}
+              className="text-xs font-bold text-[#594be0] hover:underline"
+            >
+              Voir toutes les candidatures →
+            </button>
+          </div>
+          <div className="mt-3 divide-y divide-[#f2f4f9]">
+            {recruiterAlerts.slice(0, 4).map((alert: NotificationRecord) => (
+              <div key={alert.id} className="py-3 flex items-start gap-3">
+                <span className="grid size-8 place-items-center rounded-xl bg-[#ecfdf5] text-[#059669] shrink-0 mt-0.5">
+                  <CheckCircle2 size={16} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-black text-[#1a2235]">{alert.objet}</div>
+                  <div className="text-[11px] text-[#5e677e] mt-0.5 leading-relaxed">{alert.message}</div>
+                </div>
+                <div className="text-[10px] text-[#9ba3b8] font-bold shrink-0">{alert.created_at}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Mes Offres Section */}
       <div className="mt-8 rounded-3xl border border-[#e8ebf3] bg-white p-6 shadow-xs">
         <h2 className="text-sm font-extrabold text-[#171f33]">
           Mes offres d'emploi ({companyJobs.length})
         </h2>
         <div className="mt-4 divide-y divide-[#f2f4f9]">
-          {companyJobs.map((job) => (
+          {companyJobs.map((job: Offre) => (
             <div
               key={job.id}
               className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3.5"

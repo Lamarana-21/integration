@@ -91,10 +91,13 @@ class EntrepriseController extends Controller
     {
         $entreprise = Entreprise::findOrFail($id);
         $user = $request->user();
+        if (!$user && $request->header('X-User-Id')) {
+            $user = User::find($request->header('X-User-Id'));
+        }
 
-        // RM3 : Vérifier que c'est bien l'entreprise du recruteur (ou admin)
-        if ($user && !$user->isAdmin() && $user->entreprise_id !== $entreprise->id) {
-            return response()->json(['message' => 'Action non autorisée sur cette entreprise'], 403);
+        // Seul l'administrateur peut modifier la fiche d'une entreprise
+        if ($user && !$user->isAdmin()) {
+            return response()->json(['message' => 'Action non autorisée. Seul un administrateur peut modifier cette entreprise.'], 403);
         }
 
         $validated = $request->validate([

@@ -62,7 +62,7 @@ export function AdminEntreprisesView({
       <div className="flex flex-col justify-between gap-4 border-b border-[#eef1f7] pb-5 sm:flex-row sm:items-center">
         <div>
           <span className="text-xs font-bold text-[#8c94a9] uppercase tracking-wider">
-            Supervision du contenu (E14)
+            Supervision du contenu
           </span>
           <h1 className="mt-1 text-2xl font-black text-[#171f33]">
             Entreprises et offres
@@ -182,7 +182,7 @@ export function AdminEntreprisesView({
                 <input
                   type="text"
                   required
-                  value={nom}
+                  value={nom ?? ''}
                   onChange={(e) => setNom(e.target.value)}
                   placeholder="Société Delta"
                   className="mt-1 w-full rounded-xl border p-2.5 outline-none"
@@ -194,7 +194,7 @@ export function AdminEntreprisesView({
                 <input
                   type="text"
                   required
-                  value={secteur}
+                  value={secteur ?? ''}
                   onChange={(e) => setSecteur(e.target.value)}
                   placeholder="Technologies, Finance, etc."
                   className="mt-1 w-full rounded-xl border p-2.5 outline-none"
@@ -206,7 +206,7 @@ export function AdminEntreprisesView({
                 <input
                   type="text"
                   required
-                  value={ville}
+                  value={ville ?? ''}
                   onChange={(e) => setVille(e.target.value)}
                   placeholder="Tunis, Sfax, Sousse..."
                   className="mt-1 w-full rounded-xl border p-2.5 outline-none"
@@ -217,7 +217,7 @@ export function AdminEntreprisesView({
                 <label className="font-bold text-[#20273a]">Site Web</label>
                 <input
                   type="text"
-                  value={siteWeb}
+                  value={siteWeb ?? ''}
                   onChange={(e) => setSiteWeb(e.target.value)}
                   placeholder="https://delta.example"
                   className="mt-1 w-full rounded-xl border p-2.5 outline-none"
@@ -228,7 +228,7 @@ export function AdminEntreprisesView({
                 <label className="font-bold text-[#20273a]">Description</label>
                 <textarea
                   rows={2}
-                  value={description}
+                  value={description ?? ''}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Courte présentation..."
                   className="mt-1 w-full rounded-xl border p-2.5 outline-none"

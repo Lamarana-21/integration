@@ -20,6 +20,7 @@ class Cv extends Model
         'type_mime',
         'taille_octets',
         'url_stockage',
+        'contenu_base64',
     ];
 
     public function candidat(): BelongsTo

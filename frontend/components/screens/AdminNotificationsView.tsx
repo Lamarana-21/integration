@@ -59,6 +59,13 @@ export function AdminNotificationsView({
       sujet: 'Réinitialisation sécurisée de votre mot de passe Talenta',
       corps: 'Bonjour {prenom}, voici votre lien de réinitialisation temporaire (valable 60 minutes) : /reinitialiser?token={token}.',
     },
+    {
+      code: 'NOUVELLE_OFFRE',
+      titre: 'Alerte nouvelle offre créée par un recruteur',
+      destinataire: 'Administrateur système',
+      sujet: 'Nouvelle offre {type_contrat} : {offre_titre}',
+      corps: 'Le recruteur {recruteur_nom} ({recruteur_email}) a créé une nouvelle offre de type {type_contrat} intitulée « {offre_titre} » rattachée à l\'entreprise {entreprise_nom} ({entreprise_ville}).',
+    },
   ];
 
   return (
@@ -67,7 +74,7 @@ export function AdminNotificationsView({
       <div className="flex flex-col justify-between gap-4 border-b border-[#eef1f7] pb-5 sm:flex-row sm:items-center">
         <div>
           <span className="text-xs font-bold text-[#8c94a9] uppercase tracking-wider">
-            Traçabilité & E-mails (E15)
+            Traçabilité & E-mails
           </span>
           <h1 className="mt-1 text-2xl font-black text-[#171f33]">
             Journal des notifications
@@ -81,7 +88,7 @@ export function AdminNotificationsView({
           onClick={() => setShowTemplatesModal(true)}
           className="flex items-center gap-2 rounded-2xl border border-[#dde0ec] bg-white px-5 py-2.5 text-xs font-bold text-[#444c60] shadow-xs hover:bg-[#fafbfc]"
         >
-          <Edit size={14} /> Modifier les modèles d'e-mails (11.6)
+          <Edit size={14} /> Modifier les modèles d'e-mails
         </button>
       </div>
 
@@ -97,6 +104,7 @@ export function AdminNotificationsView({
           <option value="CONFIRMATION_DEPOT">Confirmation dépôt</option>
           <option value="CHANGEMENT_STATUT">Changement statut</option>
           <option value="NOUVELLE_CANDIDATURE">Nouvelle candidature</option>
+          <option value="NOUVELLE_OFFRE">Nouvelle offre recruteur</option>
           <option value="REINITIALISATION_MDP">Réinitialisation MDP</option>
         </select>
       </div>
@@ -129,12 +137,37 @@ export function AdminNotificationsView({
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <span className="rounded-md bg-[#eeeaff] px-2 py-0.5 text-[10px] font-bold text-[#5547d7]">
-                    {notif.type}
+                  <span
+                    className={`rounded-lg px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide border ${
+                      notif.type === 'NOUVELLE_OFFRE'
+                        ? 'bg-[#e0e7ff] text-[#3730a3] border-[#c7d2fe]'
+                        : notif.type === 'NOUVELLE_CANDIDATURE'
+                        ? 'bg-[#f3e8ff] text-[#6b21a8] border-[#e9d5ff]'
+                        : notif.type === 'CONFIRMATION_DEPOT'
+                        ? 'bg-[#ecfdf5] text-[#065f46] border-[#a7f3d0]'
+                        : notif.type === 'CHANGEMENT_STATUT'
+                        ? 'bg-[#fffbeb] text-[#92400e] border-[#fde68a]'
+                        : 'bg-[#eeeaff] text-[#5547d7] border-[#dcd7fb]'
+                    }`}
+                  >
+                    {notif.type === 'NOUVELLE_OFFRE'
+                      ? 'Nouvelle offre'
+                      : notif.type === 'NOUVELLE_CANDIDATURE'
+                      ? 'Candidature reçue'
+                      : notif.type === 'CONFIRMATION_DEPOT'
+                      ? 'Confirmation dépôt'
+                      : notif.type === 'CHANGEMENT_STATUT'
+                      ? 'Statut candidat'
+                      : notif.type}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-[#444c60] font-medium max-w-xs truncate">
-                  {notif.objet}
+                <td className="px-6 py-4 text-[#444c60] font-medium max-w-md">
+                  <div className="font-extrabold text-[#171f33] text-xs">{notif.objet}</div>
+                  {notif.message && (
+                    <div className="text-[11px] text-[#5d677f] mt-1 leading-relaxed bg-[#f8f9fd] p-2 rounded-xl border border-[#edf0f7]">
+                      {notif.message}
+                    </div>
+                  )}
                 </td>
                 <td className="px-6 py-4">
                   <span
@@ -182,7 +215,7 @@ export function AdminNotificationsView({
             <div className="flex items-center justify-between border-b pb-4">
               <div>
                 <h3 className="text-base font-extrabold text-[#171f33]">
-                  Modèles d'e-mails transactionnels (Module 11.6)
+                  Modèles d'e-mails transactionnels
                 </h3>
                 <p className="text-xs text-[#7e879c]">
                   Personnalisez le contenu des e-mails automatiques envoyés par la plateforme.

@@ -6,7 +6,7 @@ export type JobStatus = 'BROUILLON' | 'PUBLIEE' | 'CLOTUREE' | 'ARCHIVEE';
 export type ContractType = 'CDI' | 'CDD' | 'STAGE' | 'ALTERNANCE' | 'FREELANCE';
 export type ApplicationStatus = 'RECUE' | 'EN_EXAMEN' | 'PRESELECTIONNEE' | 'ENTRETIEN' | 'ACCEPTEE' | 'REFUSEE' | 'RETIREE';
 export type ConfidenceLevel = 'FAIBLE' | 'MOYEN' | 'ELEVE';
-export type NotificationType = 'CONFIRMATION_DEPOT' | 'CHANGEMENT_STATUT' | 'NOUVELLE_CANDIDATURE' | 'REINITIALISATION_MDP';
+export type NotificationType = 'CONFIRMATION_DEPOT' | 'CHANGEMENT_STATUT' | 'NOUVELLE_CANDIDATURE' | 'REINITIALISATION_MDP' | 'NOUVELLE_OFFRE';
 export type NotificationStatus = 'EN_ATTENTE' | 'ENVOYE' | 'ECHEC';
 
 export interface Permission {
@@ -82,6 +82,7 @@ export interface CV {
   est_principal?: boolean;
   score_ia?: number;
   est_genere?: boolean;
+  source_type?: 'DYNAMIQUE' | 'FICHIER_LOCAL' | 'ENREGISTRE';
   template_style?: 'moderne' | 'minimaliste' | 'corporate';
 }
 
@@ -89,6 +90,8 @@ export interface Candidat {
   id: string;
   utilisateur_id: string;
   user?: User;
+  nom?: string;
+  prenom?: string;
   titre?: string;
   telephone?: string;
   ville?: string;
@@ -110,6 +113,7 @@ export interface Candidat {
   langues: string[];
   disponibilite?: string;
   cvs?: CV[];
+  favoris_offres_ids?: string[];
   created_at?: string;
 }
 
@@ -175,6 +179,9 @@ export interface Candidature {
   message?: string;
   statut: ApplicationStatus;
   commentaire_recruteur?: string;
+  date_entretien?: string;
+  type_entretien?: 'VISIO' | 'PRESENTIEL' | 'TELEPHONE';
+  lien_ou_lieu_entretien?: string;
   analyse?: AnalyseCv;
   notes_internes?: NoteInterne[];
   created_at: string;
@@ -190,4 +197,50 @@ export interface NotificationRecord {
   message: string;
   statut_envoi: NotificationStatus;
   created_at: string;
+  lu?: boolean;
 }
+
+export interface ChatMessage {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  sender_role: RoleName;
+  sender_name: string;
+  receiver_id: string;
+  receiver_name: string;
+  contenu: string;
+  created_at: string;
+  lu: boolean;
+}
+
+export interface Conversation {
+  id: string;
+  candidat_id: string;
+  candidat_nom: string;
+  candidat_avatar?: string;
+  recruteur_id: string;
+  recruteur_nom: string;
+  entreprise_id?: string;
+  entreprise_nom: string;
+  offre_id?: string;
+  offre_titre?: string;
+  dernier_message?: string;
+  updated_at: string;
+  non_lus_candidat: number;
+  non_lus_recruteur: number;
+}
+
+export const JOB_ALIAS_MAP: Record<string, string[]> = {
+  'job-1': ['01a16a74-f953-716c-8d14-dafd2fdd5f2d'],
+  '01a16a74-f953-716c-8d14-dafd2fdd5f2d': ['job-1'],
+  'job-4': ['01a16a74-f97c-7188-9923-e7c1229ba727'],
+  '01a16a74-f97c-7188-9923-e7c1229ba727': ['job-4'],
+};
+
+export function isJobFavorited(jobId?: string | null, favIds: string[] = []): boolean {
+  if (!jobId || !Array.isArray(favIds) || favIds.length === 0) return false;
+  const cleanTarget = String(jobId).trim().toLowerCase();
+  const aliases = [cleanTarget, ...(JOB_ALIAS_MAP[cleanTarget] || []).map((a) => a.toLowerCase())];
+  return favIds.some((f) => aliases.includes(String(f).trim().toLowerCase()));
+}
+

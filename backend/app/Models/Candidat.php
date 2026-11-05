@@ -14,14 +14,23 @@ class Candidat extends Model
 
     protected $fillable = [
         'utilisateur_id',
+        'nom',
+        'prenom',
         'telephone',
         'ville',
+        'pays',
+        'titre',
+        'avatar_url',
         'resume',
+        'linkedin_url',
+        'github_url',
+        'portfolio_url',
         'competences',
         'experiences',
         'formations',
         'langues',
         'disponibilite',
+        'favoris_offres_ids',
     ];
 
     protected $casts = [
@@ -29,6 +38,7 @@ class Candidat extends Model
         'experiences' => 'array',
         'formations' => 'array',
         'langues' => 'array',
+        'favoris_offres_ids' => 'array',
         'disponibilite' => 'date',
     ];
 

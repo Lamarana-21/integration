@@ -75,7 +75,7 @@ export function MesCandidaturesView({
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-black text-[#171e31] sm:text-3xl">
-            Mes candidatures (E5)
+            Mes candidatures
           </h1>
           <p className="mt-1 text-xs text-[#7c859c]">
             Suivez en temps réel l'avancement de vos dossiers et consultez les retours des recruteurs.
@@ -138,16 +138,18 @@ export function MesCandidaturesView({
                     >
                       <td className="px-6 py-4">
                         <div className="font-extrabold text-[#171f33] text-sm">
-                          {cand.offre?.titre}
+                          {cand.offre?.titre || 'Poste proposé'}
                         </div>
                         <div className="text-[11px] text-[#7d869d]">
-                          Contrat {cand.offre?.type_contrat} · {cand.offre?.lieu}
+                          {cand.offre?.type_contrat ? `Contrat ${cand.offre.type_contrat}` : 'Offre'} {cand.offre?.lieu ? `· ${cand.offre.lieu}` : ''}
                         </div>
                       </td>
                       <td className="px-6 py-4 font-semibold text-[#3b4356]">
-                        {cand.offre?.entreprise?.nom}
+                        {cand.offre?.entreprise?.nom || 'Entreprise partenaire'}
                       </td>
-                      <td className="px-6 py-4 text-[#6e778d]">{cand.created_at}</td>
+                      <td className="px-6 py-4 text-[#6e778d]">
+                        {cand.created_at ? (cand.created_at.includes('T') ? cand.created_at.split('T')[0] : cand.created_at) : 'À l’instant'}
+                      </td>
                       <td className="px-6 py-4">{getStatusBadge(cand.statut)}</td>
                       <td className="px-6 py-4 text-right">
                         <button
@@ -180,7 +182,7 @@ export function MesCandidaturesView({
                     Suivi de candidature sélectionnée
                   </div>
                   <h3 className="mt-1 text-lg font-black text-[#171f33]">
-                    {selectedCandidature.offre?.titre} — {selectedCandidature.offre?.entreprise?.nom}
+                    {selectedCandidature.offre?.titre || 'Poste postulé'} — {selectedCandidature.offre?.entreprise?.nom || 'Entreprise partenaire'}
                   </h3>
                 </div>
 
@@ -202,7 +204,7 @@ export function MesCandidaturesView({
                         onClick={() => onWithdrawApplication(selectedCandidature.id)}
                         className="flex items-center gap-1.5 rounded-xl border border-[#ffd5d5] bg-[#fff6f6] px-3.5 py-2 text-xs font-bold text-[#cf3b3b] hover:bg-[#ffebeb]"
                       >
-                        <Trash2 size={14} /> Retirer la candidature (RM5)
+                        <Trash2 size={14} /> Retirer la candidature
                       </button>
                     )}
                 </div>

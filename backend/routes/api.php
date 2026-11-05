@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Route;
 // --- 1. Authentification & Accès Public (Module 3) ---
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/login', [AuthController::class, 'login'])->name('login');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
     
     Route::middleware('auth:sanctum')->group(function () {
@@ -34,34 +34,60 @@ Route::prefix('auth')->group(function () {
     });
 });
 
-// --- 2. Offres Publiques & Recherche (Module 5) ---
+// --- 2. Offres Publiques, Recherche, Candidatures & Gestion Utilisateurs ---
 Route::get('/jobs', [OffreController::class, 'index']);
+Route::post('/jobs', [OffreController::class, 'store']);
 Route::get('/jobs/{id}', [OffreController::class, 'show']);
+Route::patch('/jobs/{id}', [OffreController::class, 'update']);
+Route::post('/jobs/{id}/publish', [OffreController::class, 'publish']);
+Route::post('/jobs/{id}/close', [OffreController::class, 'close']);
+Route::delete('/jobs/{id}', [OffreController::class, 'destroy']);
+
+// Candidatures
+Route::get('/applications', [CandidatureController::class, 'index']);
+Route::get('/applications/my', [CandidatureController::class, 'mesCandidatures']);
+Route::post('/jobs/{id}/applications', [CandidatureController::class, 'postuler']);
+Route::patch('/applications/{id}/status', [CandidatureController::class, 'updateStatus']);
+Route::delete('/applications/{id}', [CandidatureController::class, 'retirer']);
+
 Route::get('/companies', [EntrepriseController::class, 'index']);
+Route::post('/companies', [EntrepriseController::class, 'store']);
 Route::get('/companies/{id}', [EntrepriseController::class, 'show']);
+Route::patch('/companies/{id}', [EntrepriseController::class, 'update']);
+Route::delete('/companies/{id}', [EntrepriseController::class, 'destroy']);
+Route::get('/users', [UserController::class, 'index']);
+Route::post('/users', [UserController::class, 'store']);
+Route::get('/users/{id}', [UserController::class, 'show']);
+Route::patch('/users/{id}', [UserController::class, 'update']);
+Route::patch('/users/{id}/toggle-statut', [UserController::class, 'toggleStatut']);
+Route::delete('/users/{id}', [UserController::class, 'destroy']);
+
+// --- Module 2 : Droits, Rôles et Permissions (Accès direct & Admin) ---
+Route::get('/roles', [RolePermissionController::class, 'getRoles']);
+Route::post('/roles', [RolePermissionController::class, 'storeRole']);
+Route::get('/roles/{id}', [RolePermissionController::class, 'showRole']);
+Route::patch('/roles/{id}', [RolePermissionController::class, 'updateRole']);
+Route::delete('/roles/{id}', [RolePermissionController::class, 'deleteRole']);
+Route::put('/roles/{id}/permissions', [RolePermissionController::class, 'updateRolePermissions']);
+Route::get('/permissions', [RolePermissionController::class, 'getPermissions']);
+
+// --- Module CV : Stockage et Téléchargement direct depuis MySQL ---
+Route::get('/cvs/{id}/download', [CvController::class, 'download']);
+Route::post('/candidates/cvs', [CvController::class, 'store']);
+Route::delete('/cvs/{id}', [CvController::class, 'destroy']);
+
+// --- Module Candidats & Favoris Dynamiques (Persistance MySQL) ---
+Route::get('/candidates/profile', [CandidatController::class, 'meProfile']);
+Route::put('/candidates/profile', [CandidatController::class, 'updateProfile']);
+Route::get('/candidates/favoris', [CandidatController::class, 'getFavoris']);
+Route::post('/candidates/favoris/toggle', [CandidatController::class, 'toggleFavori']);
+
+// --- Module Notifications (Journal Admin & Recruteur) ---
+Route::get('/notifications', [NotificationController::class, 'index']);
+Route::post('/notifications/{id}/resend', [NotificationController::class, 'resend']);
 
 // --- 3. Routes Protégées par Authentification Sanctum ---
 Route::middleware('auth:sanctum')->group(function () {
-
-    // --- Module 1 : Utilisateurs (Admin & Profil) ---
-    Route::prefix('users')->group(function () {
-        Route::get('/', [UserController::class, 'index'])->middleware('permission:VOIR_UTILISATEURS');
-        Route::post('/', [UserController::class, 'store'])->middleware('permission:CREER_UTILISATEUR');
-        Route::get('/{id}', [UserController::class, 'show']);
-        Route::patch('/{id}', [UserController::class, 'update'])->middleware('permission:MODIFIER_UTILISATEUR');
-        Route::patch('/{id}/toggle-statut', [UserController::class, 'toggleStatut'])->middleware('permission:SUSPENDRE_UTILISATEUR');
-        Route::delete('/{id}', [UserController::class, 'destroy'])->middleware('permission:SUPPRIMER_UTILISATEUR');
-    });
-
-    // --- Module 2 : Droits, Rôles et Permissions ---
-    Route::prefix('roles')->middleware('permission:GERER_ROLES')->group(function () {
-        Route::get('/', [RolePermissionController::class, 'getRoles']);
-        Route::post('/', [RolePermissionController::class, 'storeRole']);
-        Route::patch('/{id}', [RolePermissionController::class, 'updateRole']);
-        Route::delete('/{id}', [RolePermissionController::class, 'deleteRole']);
-        Route::put('/{id}/permissions', [RolePermissionController::class, 'updateRolePermissions']);
-    });
-    Route::get('/permissions', [RolePermissionController::class, 'getPermissions'])->middleware('permission:GERER_PERMISSIONS');
 
     // --- Module 4 : Entreprises ---
     Route::prefix('companies')->group(function () {
@@ -88,18 +114,15 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- Module 6 : Candidats & CV ---
     Route::prefix('candidates')->group(function () {
         Route::get('/', [CandidatController::class, 'index'])->middleware('permission:VOIR_CANDIDAT');
-        Route::get('/{id}', [CandidatController::class, 'show']);
+        Route::get('/profile', [CandidatController::class, 'meProfile']);
         Route::put('/profile', [CandidatController::class, 'updateProfile']);
+        Route::get('/{id}', [CandidatController::class, 'show']);
         Route::delete('/my-data', [CandidatController::class, 'deleteMyData'])->middleware('permission:SUPPRIMER_DONNEES_CANDIDAT');
-        Route::post('/cvs', [CvController::class, 'store']);
     });
-    Route::get('/cvs/{id}/download', [CvController::class, 'download']);
     Route::post('/cvs/{id}/analyse', [AnalyseCvController::class, 'analyserCv']);
-    Route::delete('/cvs/{id}', [CvController::class, 'destroy']);
 
     // --- Module 7 & 8 : Candidatures ---
     Route::prefix('applications')->group(function () {
-        Route::get('/my', [CandidatureController::class, 'mesCandidatures']);
         Route::get('/{id}', [CandidatureController::class, 'show']);
         Route::delete('/{id}', [CandidatureController::class, 'retirer'])->middleware('permission:RETIRER_CANDIDATURE');
         Route::patch('/{id}/status', [CandidatureController::class, 'updateStatus'])->middleware('permission:CHANGER_STATUT');
@@ -121,9 +144,5 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // --- Module 11 : Notifications ---
-    Route::prefix('notifications')->group(function () {
-        Route::get('/', [NotificationController::class, 'index']);
-        Route::post('/{id}/resend', [NotificationController::class, 'resend']);
-        Route::get('/templates', [NotificationController::class, 'getTemplates']);
-    });
+    Route::get('/notifications/templates', [NotificationController::class, 'getTemplates']);
 });

@@ -19,6 +19,7 @@ class User extends Authenticatable
         'nom',
         'prenom',
         'email',
+        'avatar_url',
         'password',
         'role_id',
         'entreprise_id',

@@ -12,20 +12,30 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { ContractType, JobStatus, Offre } from '@/lib/types';
+import { ContractType, Entreprise, JobStatus, Offre, User } from '@/lib/types';
 
 interface NouvelleOffreViewProps {
   initialOffre?: Offre | null;
+  entreprises?: Entreprise[];
+  currentUser?: User | null;
   onSave: (offreData: Partial<Offre>, publishImmediately: boolean) => void;
   onCancel: () => void;
 }
 
 export function NouvelleOffreView({
   initialOffre,
+  entreprises = [],
+  currentUser,
   onSave,
   onCancel,
 }: NouvelleOffreViewProps) {
   const [titre, setTitre] = useState(initialOffre?.titre || '');
+  const [entrepriseId, setEntrepriseId] = useState<string>(
+    initialOffre?.entreprise_id ||
+    currentUser?.entreprise_id ||
+    entreprises[0]?.id ||
+    '01a16a74-f27b-738f-a948-0fb179d8aed4'
+  );
   const [typeContrat, setTypeContrat] = useState<ContractType>(
     initialOffre?.type_contrat || 'CDI'
   );
@@ -80,6 +90,7 @@ export function NouvelleOffreView({
         missions,
         competences_requises: competences,
         date_limite: dateLimite,
+        entreprise_id: entrepriseId,
         statut: publishImmediately ? 'PUBLIEE' : 'BROUILLON',
       },
       publishImmediately
@@ -92,7 +103,7 @@ export function NouvelleOffreView({
       <div className="flex items-center justify-between border-b border-[#eef1f7] pb-5">
         <div>
           <span className="rounded-md bg-[#eeeaff] px-2.5 py-0.5 text-xs font-bold text-[#5547d7]">
-            {initialOffre ? 'Modification' : 'Création d’offre (E8)'}
+            {initialOffre ? 'Modification' : 'Création d’offre'}
           </span>
           <h1 className="mt-2 text-2xl font-black text-[#171f33]">
             {initialOffre ? `Modifier : ${initialOffre.titre}` : 'Nouvelle offre d’emploi'}
@@ -114,18 +125,41 @@ export function NouvelleOffreView({
 
       {/* Main E8 Form */}
       <div className="mt-6 space-y-6 rounded-3xl border border-[#e8ebf3] bg-white p-6 sm:p-8 shadow-xs">
-        <div>
-          <label className="text-xs font-bold text-[#20283c]">
-            Titre de l'offre *
-          </label>
-          <input
-            type="text"
-            required
-            value={titre}
-            onChange={(e) => setTitre(e.target.value)}
-            placeholder="Ex: Développeur Web Junior, Responsable Marketing..."
-            className="mt-1.5 w-full rounded-xl border border-[#e2e5ef] bg-[#fafbfc] px-4 py-3 text-xs text-[#1a2133] outline-none focus:border-[#6355e8]"
-          />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="text-xs font-bold text-[#20283c]">
+              Titre de l'offre *
+            </label>
+            <input
+              type="text"
+              required
+              value={titre}
+              onChange={(e) => setTitre(e.target.value)}
+              placeholder="Ex: Développeur Web Junior, Responsable Marketing..."
+              className="mt-1.5 w-full rounded-xl border border-[#e2e5ef] bg-[#fafbfc] px-4 py-3 text-xs text-[#1a2133] outline-none focus:border-[#6355e8]"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-[#20283c] flex items-center gap-1.5">
+              <Building2 size={13} className="text-[#594be0]" /> Entreprise affiliée *
+            </label>
+            <select
+              value={entrepriseId}
+              onChange={(e) => setEntrepriseId(e.target.value)}
+              className="mt-1.5 w-full rounded-xl border border-[#e2e5ef] bg-[#fafbfc] px-3.5 py-3 text-xs font-bold text-[#1a2133] outline-none focus:border-[#6355e8]"
+            >
+              {entreprises && entreprises.length > 0 ? (
+                entreprises.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nom} — {e.secteur} ({e.ville})
+                  </option>
+                ))
+              ) : (
+                <option value="01a16a74-f27b-738f-a948-0fb179d8aed4">Société Alpha (Sfax)</option>
+              )}
+            </select>
+          </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">

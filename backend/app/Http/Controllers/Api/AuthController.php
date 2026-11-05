@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Candidat;
+use App\Models\Entreprise;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\NotificationService;
@@ -24,7 +25,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Module 3.1 : Inscription d'un candidat
+     * Module 3.1 : Inscription d'un utilisateur (Candidat ou Recruteur)
      */
     public function register(Request $request): JsonResponse
     {
@@ -33,37 +34,72 @@ class AuthController extends Controller
             'prenom' => 'required|string|max:100',
             'email' => 'required|string|email|max:150|unique:users,email',
             'password' => 'required|string|min:8',
+            'role' => 'nullable|string|in:CANDIDAT,RECRUTEUR,ADMIN',
+            'entreprise_nom' => 'nullable|string|max:150',
+            'entreprise_id' => 'nullable|string',
+            'titre' => 'nullable|string|max:150',
+            'telephone' => 'nullable|string|max:50',
+            'ville' => 'nullable|string|max:100',
         ]);
 
-        $candidatRole = Role::firstOrCreate(
-            ['nom' => 'CANDIDAT'],
-            ['description' => 'Espace candidat pour postuler et suivre ses candidatures']
+        $roleName = strtoupper($request->input('role', 'CANDIDAT'));
+        $role = Role::firstOrCreate(
+            ['nom' => $roleName],
+            ['description' => "Rôle {$roleName} sur la plateforme Talenta"]
         );
+
+        $entrepriseId = $request->input('entreprise_id');
+        if ($roleName === 'RECRUTEUR') {
+            if (!$entrepriseId && $request->filled('entreprise_nom')) {
+                $ent = Entreprise::firstOrCreate(
+                    ['nom' => trim($request->input('entreprise_nom'))],
+                    [
+                        'secteur' => 'Technologies & Services',
+                        'ville' => $request->input('ville', 'Tunis'),
+                        'pays' => 'Tunisie',
+                        'statut' => 'ACTIVE',
+                    ]
+                );
+                $entrepriseId = $ent->id;
+            } elseif (!$entrepriseId) {
+                // Associer par défaut à la première entreprise si aucune fournie
+                $firstEnt = Entreprise::first();
+                $entrepriseId = $firstEnt?->id;
+            }
+        }
 
         $user = User::create([
             'nom' => $validated['nom'],
             'prenom' => $validated['prenom'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
-            'role_id' => $candidatRole->id,
+            'role_id' => $role->id,
+            'entreprise_id' => $entrepriseId,
             'statut' => 'ACTIF',
             'derniere_connexion' => Carbon::now(),
         ]);
 
-        // Créer le profil candidat associé (Entité 3.7)
-        Candidat::create([
-            'utilisateur_id' => $user->id,
-            'competences' => [],
-            'experiences' => [],
-            'formations' => [],
-            'langues' => [],
-        ]);
+        if ($roleName === 'CANDIDAT') {
+            Candidat::create([
+                'utilisateur_id' => $user->id,
+                'nom' => $validated['nom'],
+                'prenom' => $validated['prenom'],
+                'titre' => $request->input('titre', 'Développeur Web Full Stack'),
+                'telephone' => $request->input('telephone'),
+                'ville' => $request->input('ville', 'Tunis'),
+                'pays' => 'Tunisie',
+                'competences' => ['React', 'Node.js', 'SQL', 'TypeScript'],
+                'experiences' => [],
+                'formations' => [],
+                'langues' => ['Français', 'Anglais'],
+            ]);
+        }
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
             'message' => 'Inscription réussie',
-            'user' => $user->load(['role', 'candidat']),
+            'user' => $user->load(['role', 'entreprise', 'candidat']),
             'token' => $token,
         ], 201);
     }
@@ -78,7 +114,7 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        $user = User::with(['role.permissions', 'entreprise', 'candidat'])->where('email', $validated['email'])->first();
+        $user = User::with(['role.permissions', 'entreprise', 'candidat.cvs'])->where('email', $validated['email'])->first();
 
         if (!$user || !Hash::check($validated['password'], $user->password)) {
             throw ValidationException::withMessages([
@@ -95,6 +131,13 @@ class AuthController extends Controller
 
         $user->update(['derniere_connexion' => Carbon::now()]);
         $token = $user->createToken('auth_token')->plainTextToken;
+
+        if ($user->candidat) {
+            if (empty($user->candidat->nom) || empty($user->candidat->prenom)) {
+                $user->candidat->update(['nom' => $user->nom, 'prenom' => $user->prenom]);
+            }
+            $user->candidat->setRelation('user', $user);
+        }
 
         return response()->json([
             'message' => 'Connexion réussie',
@@ -121,6 +164,9 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         $user = $request->user()->load(['role.permissions', 'entreprise', 'candidat.cvs']);
+        if ($user->candidat) {
+            $user->candidat->setRelation('user', $user);
+        }
 
         return response()->json([
             'user' => $user,

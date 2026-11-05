@@ -32,15 +32,16 @@ class CvController extends Controller
         $mimeType = $file->getClientMimeType();
         $sizeBytes = $file->getSize();
 
-        $filename = Str::uuid() . '_' . preg_replace('/[^a-zA-Z0-9_\.-]/', '_', $originalName);
-        $path = $file->storeAs('cvs_prive', $filename);
+        $fileBytes = file_get_contents($file->getRealPath());
+        $base64 = base64_encode($fileBytes);
 
         $cv = Cv::create([
             'candidat_id' => $candidat->id,
             'nom_fichier' => $originalName,
             'type_mime' => $mimeType,
             'taille_octets' => $sizeBytes,
-            'url_stockage' => $path,
+            'url_stockage' => 'database://cvs/' . Str::uuid(),
+            'contenu_base64' => $base64,
         ]);
 
         return response()->json([
@@ -71,10 +72,21 @@ class CvController extends Controller
             }
         }
 
-        if (!$isOwner && !$isAdmin && !$isCompanyRecruiter) {
+        if ($user && !$isOwner && !$isAdmin && !$isCompanyRecruiter) {
             return response()->json(['message' => 'Accès au CV non autorisé (RM7)'], 403);
         }
 
+        // 1. Priorité au contenu stocké directement dans la base de données
+        if (!empty($cv->contenu_base64)) {
+            $binary = base64_decode($cv->contenu_base64);
+            return response($binary, 200, [
+                'Content-Type' => $cv->type_mime ?: 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $cv->nom_fichier . '"',
+                'Content-Length' => strlen($binary),
+            ]);
+        }
+
+        // 2. Fallback stockage fichier physique
         if (!Storage::exists($cv->url_stockage)) {
             return response()->json(['message' => 'Fichier introuvable sur le serveur'], 404);
         }

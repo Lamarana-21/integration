@@ -10,12 +10,14 @@ import {
   ChevronRight,
   Clock,
   Filter,
+  Heart,
   MapPin,
+  MessageSquare,
   RotateCcw,
   Search,
   Sparkles,
 } from 'lucide-react';
-import { ContractType, Offre, RoleName, User } from '@/lib/types';
+import { ContractType, Offre, RoleName, User, isJobFavorited } from '@/lib/types';
 
 interface OffresPubliquesViewProps {
   offres: Offre[];
@@ -24,7 +26,20 @@ interface OffresPubliquesViewProps {
   currentRole: RoleName;
   currentUser: User | null;
   candidatureOffreIds: string[];
+  favorisOffresIds?: string[];
+  onToggleFavori?: (offreId: string) => void;
+  onContactRecruiter?: (offre: Offre) => void;
 }
+
+const formatFrenchDate = (dateStr?: string) => {
+  if (!dateStr) return '';
+  const clean = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+  const parts = clean.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return clean;
+};
 
 export function OffresPubliquesView({
   offres,
@@ -33,6 +48,9 @@ export function OffresPubliquesView({
   currentRole,
   currentUser,
   candidatureOffreIds,
+  favorisOffresIds = [],
+  onToggleFavori,
+  onContactRecruiter,
 }: OffresPubliquesViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [villeFilter, setVilleFilter] = useState('');
@@ -127,19 +145,56 @@ export function OffresPubliquesView({
                 </span>
                 {selectedJob.date_publication && (
                   <span className="flex items-center gap-1">
-                    <Calendar size={15} /> Publiée le {selectedJob.date_publication}
+                    <Calendar size={15} /> Publiée le {formatFrenchDate(selectedJob.date_publication)}
                   </span>
                 )}
                 {selectedJob.date_limite && (
                   <span className="flex items-center gap-1 text-[#b54b4b] font-bold">
-                    <Clock size={15} /> Limite : {selectedJob.date_limite}
+                    <Clock size={15} /> Limite : {formatFrenchDate(selectedJob.date_limite)}
                   </span>
                 )}
               </div>
             </div>
 
             {/* Action button states */}
-            <div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              {onToggleFavori && (
+                <button
+                  type="button"
+                  onClick={() => onToggleFavori(selectedJob.id)}
+                  className={`grid size-11 place-items-center rounded-2xl border transition shadow-xs ${
+                    isJobFavorited(selectedJob.id, favorisOffresIds)
+                      ? 'border-[#fecdd3] bg-[#fff1f2] text-[#e11d48]'
+                      : 'border-[#e2e5ef] bg-white text-[#788299] hover:text-[#e11d48] hover:bg-[#fff1f2]'
+                  }`}
+                  title={
+                    !currentUser
+                      ? 'Connectez-vous pour ajouter aux favoris'
+                      : isJobFavorited(selectedJob.id, favorisOffresIds)
+                      ? 'Retirer des favoris'
+                      : 'Ajouter aux favoris'
+                  }
+                >
+                  <Heart
+                    size={18}
+                    className={
+                      isJobFavorited(selectedJob.id, favorisOffresIds) ? 'fill-[#e11d48]' : ''
+                    }
+                  />
+                </button>
+              )}
+
+              {onContactRecruiter && currentRole !== 'VISITEUR' && (
+                <button
+                  type="button"
+                  onClick={() => onContactRecruiter(selectedJob)}
+                  className="flex items-center gap-2 rounded-2xl border border-[#d8d4fa] bg-[#faf9fe] px-4 py-3 text-xs font-bold text-[#5547d7] shadow-xs hover:bg-[#f1edfe] transition"
+                >
+                  <MessageSquare size={16} />
+                  <span>Contacter le recruteur</span>
+                </button>
+              )}
+
               {currentRole === 'VISITEUR' ? (
                 <button
                   onClick={() => onPostuler(selectedJob)}
@@ -290,7 +345,7 @@ export function OffresPubliquesView({
             <input
               type="text"
               placeholder="Poste, mot-clé, compétence..."
-              value={searchTerm}
+              value={searchTerm ?? ''}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-transparent outline-none placeholder:text-[#9ea6bb]"
             />
@@ -301,7 +356,7 @@ export function OffresPubliquesView({
             <input
               type="text"
               placeholder="Ville (ex: Sfax, Tunis)"
-              value={villeFilter}
+              value={villeFilter ?? ''}
               onChange={(e) => setVilleFilter(e.target.value)}
               className="w-full bg-transparent outline-none placeholder:text-[#9ea6bb]"
             />
@@ -478,7 +533,7 @@ export function OffresPubliquesView({
                           <span className="text-xs text-[#8790a6]">· {offre.lieu}</span>
                           {offre.date_publication && (
                             <span className="text-[11px] text-[#9aa3b7]">
-                              · {offre.date_publication}
+                              · {formatFrenchDate(offre.date_publication)}
                             </span>
                           )}
                           {hasApplied && (
@@ -509,11 +564,42 @@ export function OffresPubliquesView({
                       </div>
 
                       <div className="flex sm:flex-col gap-2 shrink-0 items-end">
-                        {offre.salaire && (
-                          <div className="text-right text-xs font-extrabold text-[#192237]">
-                            {offre.salaire}
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {offre.salaire && (
+                            <div className="text-right text-xs font-extrabold text-[#192237]">
+                              {offre.salaire}
+                            </div>
+                          )}
+                          {onToggleFavori && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleFavori(offre.id);
+                              }}
+                              className={`grid size-8 place-items-center rounded-xl border transition ${
+                                isJobFavorited(offre.id, favorisOffresIds)
+                                  ? 'border-[#fecdd3] bg-[#fff1f2] text-[#e11d48]'
+                                  : 'border-[#e5e8f0] bg-white text-[#949eb5] hover:text-[#e11d48] hover:bg-[#fff1f2]'
+                              }`}
+                              title={
+                                !currentUser
+                                  ? 'Connectez-vous pour ajouter aux favoris'
+                                  : isJobFavorited(offre.id, favorisOffresIds)
+                                  ? 'Retirer des favoris'
+                                  : 'Sauvegarder en favoris'
+                              }
+                            >
+                              <Heart
+                                size={14}
+                                className={
+                                  isJobFavorited(offre.id, favorisOffresIds) ? 'fill-[#e11d48]' : ''
+                                }
+                              />
+                            </button>
+                          )}
+                        </div>
+
                         <button
                           onClick={() => setSelectedJob(offre)}
                           className="rounded-xl bg-[#594be0] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#483ad3] transition"

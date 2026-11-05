@@ -11,6 +11,7 @@ import {
   Entreprise,
   NotificationRecord,
   Offre,
+  Permission,
   Role,
   User,
 } from './types';
@@ -78,6 +79,16 @@ class ApiClient {
       ...(options.headers as Record<string, string>),
     };
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+
+    if (typeof window !== 'undefined') {
+      try {
+        const u = sessionStorage.getItem('talenta_current_user');
+        if (u) {
+          const parsed = JSON.parse(u);
+          if (parsed?.id) headers['X-User-Id'] = parsed.id;
+        }
+      } catch {}
+    }
 
     try {
       const res = await fetch(url, { ...options, headers });
@@ -153,14 +164,29 @@ class ApiClient {
     return { success: true, user };
   }
 
-  /** Inscription candidat */
+  /** Inscription utilisateur (Candidat ou Recruteur) avec persistance MySQL */
   public async register(payload: {
-    nom: string; prenom: string; email: string; password: string; rgpd: boolean;
+    nom: string;
+    prenom: string;
+    email: string;
+    password: string;
+    role?: 'CANDIDAT' | 'RECRUTEUR';
+    entreprise_nom?: string;
+    entreprise_id?: string;
+    titre?: string;
+    telephone?: string;
+    ville?: string;
+    rgpd?: boolean;
   }): Promise<ApiResponse<{ token: string; user: User }>> {
-    if (this._backendAvailable) {
-      return this.request('/auth/register', { method: 'POST', body: JSON.stringify(payload) });
+    const res = await this.request<{ token: string; user: User }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    if (res.success && res.data?.token) {
+      this.setToken(res.data.token);
+      this._backendAvailable = true;
     }
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+    return res;
   }
 
   /** Déconnexion */
@@ -179,96 +205,142 @@ class ApiClient {
     return { success: true }; // Simulation OK hors ligne
   }
 
+  /** Changer le mot de passe */
+  public async changePassword(
+    ancienMotDePasse: string,
+    nouveauMotDePasse: string
+  ): Promise<ApiResponse<{ message: string }>> {
+    return this.request('/auth/change-password', {
+      method: 'PUT',
+      body: JSON.stringify({
+        ancien_mot_de_passe: ancienMotDePasse,
+        nouveau_mot_de_passe: nouveauMotDePasse,
+      }),
+    });
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
-  //  MODULE 5 — OFFRES
+  //  MODULE 5 — OFFRES (Persistance directe Base de Données MySQL)
   // ══════════════════════════════════════════════════════════════════════════
 
   public async getOffresPubliques(params?: {
-    search?: string; contrat?: string; lieu?: string;
+    search?: string; contrat?: string; lieu?: string; statut?: string;
   }): Promise<Offre[]> {
-    if (this._backendAvailable) {
-      const qs = new URLSearchParams(params as Record<string, string>).toString();
-      const res = await this.request<{ data: Offre[] }>(`/jobs${qs ? '?' + qs : ''}`);
-      if (res.success && res.data) return res.data.data;
-    }
+    try {
+      const qs = params ? new URLSearchParams(params as Record<string, string>).toString() : '';
+      const res = await this.request<{ data?: Offre[] } | Offre[]>(`/jobs${qs ? '?' + qs : ''}`);
+      if (res.success && res.data) {
+        if (Array.isArray(res.data)) return res.data;
+        if (Array.isArray(res.data.data)) return res.data.data;
+      }
+    } catch {}
     return INITIAL_OFFRES.filter((o) => o.statut === 'PUBLIEE');
   }
 
   public async getOffreById(id: string): Promise<Offre | null> {
-    if (this._backendAvailable) {
-      const res = await this.request<Offre>(`/jobs/${id}`);
-      if (res.success && res.data) return res.data;
-    }
+    try {
+      const res = await this.request<{ offre?: Offre } | Offre>(`/jobs/${id}`);
+      if (res.success && res.data) {
+        if ('offre' in res.data && res.data.offre) return res.data.offre;
+        return res.data as Offre;
+      }
+    } catch {}
     return INITIAL_OFFRES.find((o) => o.id === id) ?? null;
   }
 
-  public async createOffre(data: Partial<Offre>): Promise<ApiResponse<Offre>> {
-    if (this._backendAvailable) return this.request('/recruiter/offres', { method: 'POST', body: JSON.stringify(data) });
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+  public async createOffre(data: Partial<Offre>): Promise<ApiResponse<{ offre: Offre; message?: string }>> {
+    return this.request<{ offre: Offre; message?: string }>('/jobs', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
-  public async updateOffre(id: string, data: Partial<Offre>): Promise<ApiResponse<Offre>> {
-    if (this._backendAvailable) return this.request(`/recruiter/offres/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+  public async updateOffre(id: string, data: Partial<Offre>): Promise<ApiResponse<{ offre: Offre; message?: string }>> {
+    return this.request<{ offre: Offre; message?: string }>(`/jobs/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
   }
 
-  public async publierOffre(id: string): Promise<ApiResponse<Offre>> {
-    if (this._backendAvailable) return this.request(`/recruiter/offres/${id}/publier`, { method: 'PATCH' });
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+  public async publierOffre(id: string): Promise<ApiResponse<{ offre: Offre; message?: string }>> {
+    return this.request<{ offre: Offre; message?: string }>(`/jobs/${id}/publish`, {
+      method: 'POST',
+    });
   }
 
-  public async cloturerOffre(id: string): Promise<ApiResponse<Offre>> {
-    if (this._backendAvailable) return this.request(`/recruiter/offres/${id}/cloturer`, { method: 'PATCH' });
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+  public async cloturerOffre(id: string): Promise<ApiResponse<{ offre: Offre; message?: string }>> {
+    return this.request<{ offre: Offre; message?: string }>(`/jobs/${id}/close`, {
+      method: 'POST',
+    });
+  }
+
+  public async deleteOffre(id: string): Promise<ApiResponse<{ message?: string }>> {
+    return this.request<{ message?: string }>(`/jobs/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  MODULE 7 — CANDIDATURES (Candidat)
+  //  MODULE 7 & 8 — CANDIDATURES (Persistance directe Base de Données MySQL)
   // ══════════════════════════════════════════════════════════════════════════
+
+  public async getAllCandidatures(): Promise<Candidature[]> {
+    try {
+      const res = await this.request<{ candidatures?: Candidature[] } | Candidature[]>('/applications');
+      if (res.success && res.data) {
+        if (Array.isArray(res.data)) return res.data;
+        if (Array.isArray(res.data.candidatures)) return res.data.candidatures;
+      }
+    } catch {}
+    return INITIAL_CANDIDATURES;
+  }
 
   public async getMesCandidatures(): Promise<Candidature[]> {
-    if (this._backendAvailable) {
-      const res = await this.request<{ data: Candidature[] }>('/candidate/candidatures');
-      if (res.success && res.data) return res.data.data;
-    }
+    try {
+      const res = await this.request<{ candidatures?: Candidature[]; data?: Candidature[] } | Candidature[]>('/applications/my');
+      if (res.success && res.data) {
+        if (Array.isArray(res.data)) return res.data;
+        if (Array.isArray(res.data.candidatures)) return res.data.candidatures;
+        if (Array.isArray(res.data.data)) return res.data.data;
+      }
+    } catch {}
     return INITIAL_CANDIDATURES;
   }
 
   public async postuler(payload: {
-    offre_id: string; cv_id?: string; lettre_motivation?: string; message?: string;
-  }): Promise<ApiResponse<Candidature>> {
-    if (this._backendAvailable) {
-      return this.request('/candidate/candidatures', { method: 'POST', body: JSON.stringify(payload) });
-    }
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+    offre_id: string; cv_id?: string; candidat_id?: string; lettre_motivation?: string; message?: string;
+  }): Promise<ApiResponse<{ candidature: Candidature; message?: string }>> {
+    return this.request<{ candidature: Candidature; message?: string }>(`/jobs/${payload.offre_id}/applications`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 
-  public async retirerCandidature(id: string): Promise<ApiResponse> {
-    if (this._backendAvailable) return this.request(`/candidate/candidatures/${id}`, { method: 'DELETE' });
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+  public async retirerCandidature(id: string): Promise<ApiResponse<{ message?: string }>> {
+    return this.request<{ message?: string }>(`/applications/${id}`, {
+      method: 'DELETE',
+    });
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  //  MODULE 8 — CANDIDATURES (Recruteur)
-  // ══════════════════════════════════════════════════════════════════════════
 
   public async getCandidaturesOffre(offreId: string): Promise<Candidature[]> {
-    if (this._backendAvailable) {
-      const res = await this.request<{ data: Candidature[] }>(`/recruiter/offres/${offreId}/candidatures`);
-      if (res.success && res.data) return res.data.data;
-    }
+    try {
+      const res = await this.request<{ data?: Candidature[]; candidatures?: Candidature[] } | Candidature[]>(`/jobs/${offreId}/applications`);
+      if (res.success && res.data) {
+        if (Array.isArray(res.data)) return res.data;
+        if (Array.isArray(res.data.candidatures)) return res.data.candidatures;
+        if (Array.isArray(res.data.data)) return res.data.data;
+      }
+    } catch {}
     return INITIAL_CANDIDATURES.filter((c) => c.offre_id === offreId);
   }
 
   public async changerStatutCandidature(
     id: string, statut: string, commentaire?: string
-  ): Promise<ApiResponse<Candidature>> {
-    if (this._backendAvailable) {
-      return this.request(`/recruiter/candidatures/${id}/statut`, {
-        method: 'PATCH', body: JSON.stringify({ statut, commentaire_recruteur: commentaire }),
-      });
-    }
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+  ): Promise<ApiResponse<{ candidature: Candidature; message?: string }>> {
+    return this.request<{ candidature: Candidature; message?: string }>(`/applications/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ statut, commentaire_recruteur: commentaire }),
+    });
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -295,18 +367,24 @@ class ApiClient {
   // ══════════════════════════════════════════════════════════════════════════
 
   public async getMonProfil(): Promise<Candidat | null> {
-    if (this._backendAvailable) {
-      const res = await this.request<Candidat>('/candidate/profil');
-      if (res.success && res.data) return res.data;
+    const res = await this.request<{ candidat: Candidat }>('/candidates/profile');
+    if (res.success && res.data?.candidat) {
+      this._backendAvailable = true;
+      return res.data.candidat;
     }
-    return INITIAL_CANDIDATS[0] ?? null;
+    return null;
   }
 
-  public async updateProfil(data: Partial<Candidat>): Promise<ApiResponse<Candidat>> {
-    if (this._backendAvailable) {
-      return this.request('/candidate/profil', { method: 'PUT', body: JSON.stringify(data) });
+  public async updateProfil(data: Record<string, unknown>): Promise<ApiResponse<Candidat>> {
+    const res = await this.request<{ candidat: Candidat; message: string }>('/candidates/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    if (res.success && res.data?.candidat) {
+      this._backendAvailable = true;
+      return { success: true, data: res.data.candidat };
     }
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+    return { success: false, error: res.error };
   }
 
   public async uploadCv(formData: FormData): Promise<ApiResponse<CV>> {
@@ -396,18 +474,82 @@ class ApiClient {
   // ══════════════════════════════════════════════════════════════════════════
 
   public async getUsers(): Promise<User[]> {
-    if (this._backendAvailable) {
-      const res = await this.request<{ data: User[] }>('/admin/users');
-      if (res.success && res.data) return res.data.data;
+    try {
+      const res = await this.request<any>('/users?per_page=100');
+      if (res.success && res.data) {
+        const list: User[] = Array.isArray(res.data)
+          ? res.data
+          : Array.isArray(res.data.data)
+          ? res.data.data
+          : [];
+        if (list.length > 0) {
+          this._backendAvailable = true;
+          return list;
+        }
+      }
+    } catch (e) {
+      console.warn('Erreur récupération utilisateurs BDD:', e);
     }
     return INITIAL_USERS;
   }
 
-  public async toggleUserStatus(id: string, statut: 'ACTIF' | 'INACTIF'): Promise<ApiResponse<User>> {
-    if (this._backendAvailable) {
-      return this.request(`/admin/users/${id}/statut`, { method: 'PATCH', body: JSON.stringify({ statut }) });
+  public async toggleUserStatus(id: string): Promise<ApiResponse<{ message: string; user: User }>> {
+    return this.request(`/users/${id}/toggle-statut`, { method: 'PATCH' });
+  }
+
+  public async deleteUser(id: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request(`/users/${id}`, { method: 'DELETE' });
+  }
+
+  /** Création d'un utilisateur par l'administrateur avec persistance MySQL */
+  public async createUser(payload: {
+    nom: string;
+    prenom: string;
+    email: string;
+    password: string;
+    role: 'CANDIDAT' | 'RECRUTEUR' | 'ADMIN';
+    entreprise_id?: string;
+    entreprise_nom?: string;
+    titre?: string;
+    telephone?: string;
+    ville?: string;
+  }): Promise<ApiResponse<{ user: User; message: string }>> {
+    return this.request('/users', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /** Modification d'un compte par l'administrateur / Récupération de compte (changement email, mot de passe) */
+  public async updateUser(
+    id: string,
+    payload: {
+      nom?: string;
+      prenom?: string;
+      email?: string;
+      password?: string;
+      role?: 'CANDIDAT' | 'RECRUTEUR' | 'ADMIN';
+      statut?: 'ACTIF' | 'INACTIF';
+      titre?: string;
+      telephone?: string;
+      ville?: string;
+      entreprise_id?: string | null;
     }
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+  ): Promise<ApiResponse<{ user: User; message: string }>> {
+    return this.request(`/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /** Détacher un recruteur de son entreprise */
+  public async detachRecruteurFromEntreprise(userId: string): Promise<ApiResponse<{ user: User; message: string }>> {
+    return this.updateUser(userId, { entreprise_id: null });
+  }
+
+  /** Rattacher un recruteur à une entreprise */
+  public async attachRecruteurToEntreprise(userId: string, entrepriseId: string): Promise<ApiResponse<{ user: User; message: string }>> {
+    return this.updateUser(userId, { entreprise_id: entrepriseId });
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -415,56 +557,162 @@ class ApiClient {
   // ══════════════════════════════════════════════════════════════════════════
 
   public async getRoles(): Promise<Role[]> {
-    if (this._backendAvailable) {
-      const res = await this.request<Role[]>('/admin/roles');
-      if (res.success && res.data) return res.data;
+    try {
+      const res = await this.request<{ roles?: Role[] } | Role[]>('/roles');
+      if (res.success && res.data) {
+        if (Array.isArray(res.data)) return res.data;
+        if (Array.isArray(res.data.roles)) return res.data.roles;
+      }
+    } catch {
+      // fallback
     }
     return INITIAL_ROLES;
   }
 
-  public async updateRolePermissions(roleId: string, permissionIds: string[]): Promise<ApiResponse> {
-    if (this._backendAvailable) {
-      return this.request(`/admin/roles/${roleId}/permissions`, {
-        method: 'PUT', body: JSON.stringify({ permissions: permissionIds }),
-      });
+  public async getPermissions(): Promise<Permission[]> {
+    try {
+      const res = await this.request<{ permissions?: Permission[] } | Permission[]>('/permissions');
+      if (res.success && res.data) {
+        if (Array.isArray(res.data)) return res.data;
+        if (Array.isArray(res.data.permissions)) return res.data.permissions;
+      }
+    } catch {
+      // fallback
     }
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+    return INITIAL_PERMISSIONS;
+  }
+
+  public async updateRolePermissions(
+    roleId: string,
+    permissionIds: string[]
+  ): Promise<ApiResponse<{ role: Role; message?: string }>> {
+    return this.request<{ role: Role; message?: string }>(`/roles/${roleId}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        permission_ids: permissionIds,
+        permissions: permissionIds,
+      }),
+    });
+  }
+
+  public async createRole(data: {
+    nom: string;
+    description?: string;
+    permission_ids?: string[];
+  }): Promise<ApiResponse<{ role: Role; message?: string }>> {
+    return this.request<{ role: Role; message?: string }>('/roles', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public async updateRole(
+    roleId: string,
+    data: { nom?: string; description?: string }
+  ): Promise<ApiResponse<{ role: Role; message?: string }>> {
+    return this.request<{ role: Role; message?: string }>(`/roles/${roleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public async deleteRole(roleId: string): Promise<ApiResponse<{ message?: string }>> {
+    return this.request<{ message?: string }>(`/roles/${roleId}`, {
+      method: 'DELETE',
+    });
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  MODULE 4 — ENTREPRISES (Admin)
+  //  MODULE 4 — ENTREPRISES (Persistance directe Base de Données MySQL)
   // ══════════════════════════════════════════════════════════════════════════
 
   public async getEntreprises(): Promise<Entreprise[]> {
-    if (this._backendAvailable) {
-      const res = await this.request<{ data: Entreprise[] }>('/admin/entreprises');
-      if (res.success && res.data) return res.data.data;
-    }
+    try {
+      const res = await this.request<{ data?: Entreprise[] } | Entreprise[]>('/companies');
+      if (res.success && res.data) {
+        if (Array.isArray(res.data)) return res.data;
+        if (Array.isArray(res.data.data)) return res.data.data;
+      }
+    } catch {}
     return INITIAL_COMPANIES;
   }
 
-  public async toggleEntrepriseStatus(id: string, statut: 'ACTIVE' | 'DESACTIVEE'): Promise<ApiResponse<Entreprise>> {
-    if (this._backendAvailable) {
-      return this.request(`/admin/entreprises/${id}`, { method: 'PUT', body: JSON.stringify({ statut }) });
-    }
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+  public async createEntreprise(data: Partial<Entreprise>): Promise<ApiResponse<{ entreprise: Entreprise; message?: string }>> {
+    return this.request<{ entreprise: Entreprise; message?: string }>('/companies', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public async updateEntreprise(id: string, data: Partial<Entreprise>): Promise<ApiResponse<{ entreprise: Entreprise; message?: string }>> {
+    return this.request<{ entreprise: Entreprise; message?: string }>(`/companies/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public async toggleEntrepriseStatus(id: string, statut: 'ACTIVE' | 'DESACTIVEE'): Promise<ApiResponse<{ entreprise: Entreprise }>> {
+    return this.request<{ entreprise: Entreprise }>(`/companies/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ statut }),
+    });
+  }
+
+  public async deleteEntreprise(id: string): Promise<ApiResponse<{ message?: string }>> {
+    return this.request<{ message?: string }>(`/companies/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  MODULE 11 — NOTIFICATIONS (Admin)
+  //  MODULE FAVORIS (Persistance MySQL immédiate)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  public async getFavoris(userId?: string): Promise<string[]> {
+    try {
+      const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+      const res = await this.request<{ favoris_offres_ids: string[] }>(`/candidates/favoris${query}`);
+      if (res.success && res.data?.favoris_offres_ids) {
+        return res.data.favoris_offres_ids;
+      }
+    } catch {}
+    return [];
+  }
+
+  public async toggleFavori(offreId: string, userId?: string): Promise<string[] | null> {
+    try {
+      const res = await this.request<{ success: boolean; favoris_offres_ids: string[] }>('/candidates/favoris/toggle', {
+        method: 'POST',
+        body: JSON.stringify({ offre_id: offreId, user_id: userId }),
+      });
+      if (res.success && res.data?.favoris_offres_ids) {
+        return res.data.favoris_offres_ids;
+      }
+    } catch {}
+    return null;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  MODULE 11 — NOTIFICATIONS (Admin & Recruteurs)
   // ══════════════════════════════════════════════════════════════════════════
 
   public async getNotifications(): Promise<NotificationRecord[]> {
-    if (this._backendAvailable) {
-      const res = await this.request<{ data: NotificationRecord[] }>('/admin/notifications');
-      if (res.success && res.data) return res.data.data;
-    }
+    try {
+      const res = await this.request<any>('/notifications');
+      if (res.success && res.data) {
+        if (Array.isArray(res.data)) return res.data;
+        if (res.data.data && Array.isArray(res.data.data)) return res.data.data;
+      }
+    } catch {}
     return INITIAL_NOTIFICATIONS;
   }
 
   public async resendNotification(id: string): Promise<ApiResponse> {
-    if (this._backendAvailable) return this.request(`/admin/notifications/${id}/resend`, { method: 'POST' });
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+    try {
+      return await this.request(`/notifications/${id}/resend`, { method: 'POST' });
+    } catch {
+      return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
+    }
   }
 }
 

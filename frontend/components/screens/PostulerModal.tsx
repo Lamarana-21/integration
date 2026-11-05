@@ -89,7 +89,7 @@ export function PostulerModal({
     setError('');
 
     if (hasAlreadyApplied) {
-      setError('Vous avez déjà postulé à cette offre (RM2). Une seconde candidature n\'est pas autorisée.');
+      setError('Vous avez déjà postulé à cette offre. Une seconde candidature n\'est pas autorisée.');
       return;
     }
 
@@ -198,7 +198,7 @@ export function PostulerModal({
                 }}
                 className="flex-1 rounded-2xl bg-[#594be0] py-3 text-xs font-bold text-white shadow-md hover:bg-[#483ad3]"
               >
-                Suivre mes candidatures (E5)
+                Suivre mes candidatures
               </button>
               <button
                 onClick={onClose}
@@ -225,7 +225,7 @@ export function PostulerModal({
 
             {hasAlreadyApplied && (
               <div className="mt-4 rounded-xl border border-[#ffd2d2] bg-[#fff5f5] p-3 text-xs font-bold text-[#cf3b3b]">
-                Vous avez déjà postulé à cette offre (RM2). Une seconde candidature n'est pas autorisée.
+                Vous avez déjà postulé à cette offre. Une seconde candidature n'est pas autorisée.
               </div>
             )}
 

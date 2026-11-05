@@ -3,11 +3,23 @@
 import React, { useState, useMemo } from 'react';
 import {
   Download,
+  Eye,
   Filter,
   Search,
   Sparkles,
   User,
   Users,
+  FileText,
+  FileCheck,
+  X,
+  Printer,
+  ChevronRight,
+  Briefcase,
+  GraduationCap,
+  Globe,
+  Mail,
+  Phone,
+  MapPin,
 } from 'lucide-react';
 import { ApplicationStatus, Candidature, Offre } from '@/lib/types';
 
@@ -29,6 +41,7 @@ export function CandidaturesOffreView({
   const [minScore, setMinScore] = useState<number>(0);
   const [search, setSearch] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [quickViewCand, setQuickViewCand] = useState<Candidature | null>(null);
 
   const selectedOffre = offres.find((o) => o.id === selectedOffreId) || offres[0];
 
@@ -40,9 +53,9 @@ export function CandidaturesOffreView({
 
       if (search) {
         const q = search.toLowerCase();
-        const nom = c.candidat?.user?.nom?.toLowerCase() || '';
-        const prenom = c.candidat?.user?.prenom?.toLowerCase() || '';
-        const email = c.candidat?.user?.email?.toLowerCase() || '';
+        const nom = (c.candidat?.nom || c.candidat?.user?.nom || '').toLowerCase();
+        const prenom = (c.candidat?.prenom || c.candidat?.user?.prenom || '').toLowerCase();
+        const email = (c.candidat?.user?.email || '').toLowerCase();
         if (!nom.includes(q) && !prenom.includes(q) && !email.includes(q)) return false;
       }
 
@@ -71,11 +84,12 @@ export function CandidaturesOffreView({
   };
 
   const exportCsv = () => {
-    const headers = ['Nom', 'Prénom', 'E-mail', 'Offre', 'Date', 'Statut', 'Score IA'];
+    const headers = ['Nom', 'Prénom', 'E-mail', 'Type CV', 'Offre', 'Date', 'Statut', 'Score IA'];
     const rows = filteredCandidatures.map((c) => [
       c.candidat?.user?.nom || '',
       c.candidat?.user?.prenom || '',
       c.candidat?.user?.email || '',
+      c.cv?.source_type === 'DYNAMIQUE' ? 'CV Dynamique' : 'Fichier importé',
       c.offre?.titre || '',
       c.created_at,
       c.statut,
@@ -101,7 +115,7 @@ export function CandidaturesOffreView({
       <div className="flex flex-col justify-between gap-4 border-b border-[#eef1f7] pb-5 sm:flex-row sm:items-center">
         <div>
           <span className="text-xs font-bold text-[#8d95ab] uppercase tracking-wider">
-            Gestion des candidatures reçues (E9)
+            Gestion des candidatures reçues
           </span>
           <div className="mt-1 flex flex-wrap items-center gap-3">
             <select
@@ -125,7 +139,7 @@ export function CandidaturesOffreView({
           onClick={exportCsv}
           className="flex items-center gap-2 rounded-2xl border border-[#dde1ed] bg-white px-4 py-2.5 text-xs font-bold text-[#4c546a] shadow-xs hover:bg-[#fafbfc]"
         >
-          <Download size={15} /> Exporter en CSV (Module 8.7)
+          <Download size={15} /> Exporter en CSV
         </button>
       </div>
 
@@ -166,7 +180,7 @@ export function CandidaturesOffreView({
           <Search size={14} className="text-[#9ea6bb]" />
           <input
             type="text"
-            value={search}
+            value={search ?? ''}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher par nom, prénom ou e-mail..."
             className="w-full bg-transparent outline-none"
@@ -221,16 +235,18 @@ export function CandidaturesOffreView({
                 />
               </th>
               <th className="px-6 py-4">Candidat</th>
+              <th className="px-6 py-4">CV / Document</th>
               <th className="px-6 py-4">Date dépôt</th>
               <th className="px-6 py-4">Score IA (Aide)</th>
               <th className="px-6 py-4">Statut</th>
-              <th className="px-6 py-4 text-right">Action</th>
+              <th className="px-6 py-4 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#f2f4f9]">
             {filteredCandidatures.map((cand) => {
               const isChecked = selectedIds.includes(cand.id);
               const score = cand.analyse?.score_correspondance || 0;
+              const isDyn = cand.cv?.source_type === 'DYNAMIQUE' || cand.cv?.est_genere || cand.cv?.nom_fichier?.includes('Dynamique');
 
               return (
                 <tr
@@ -249,10 +265,27 @@ export function CandidaturesOffreView({
                   </td>
                   <td className="px-6 py-4">
                     <div className="font-extrabold text-[#171f33] text-sm">
-                      {cand.candidat?.user?.prenom} {cand.candidat?.user?.nom}
+                      {cand.candidat?.prenom || cand.candidat?.user?.prenom || 'Candidat'} {cand.candidat?.nom || cand.candidat?.user?.nom || ''}
                     </div>
                     <div className="text-[11px] text-[#7d869d]">
-                      {cand.candidat?.user?.email} · {cand.candidat?.ville || 'Sfax'}
+                      {cand.candidat?.user?.email || 'email@exemple.com'} · {cand.candidat?.ville || 'Tunisie'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col gap-1 items-start">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black uppercase ${
+                          isDyn
+                            ? 'bg-[#efedff] text-[#5547d7] border border-[#dcd7fc]'
+                            : 'bg-[#f0f2f7] text-[#555d72] border border-[#e1e4ee]'
+                        }`}
+                      >
+                        {isDyn ? <Sparkles size={11} /> : <FileText size={11} />}
+                        {isDyn ? 'CV Dynamique' : 'Fichier Importé'}
+                      </span>
+                      <span className="text-[10px] text-[#8a93a8] max-w-[150px] truncate">
+                        {cand.cv?.nom_fichier || 'CV.pdf'}
+                      </span>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-[#6e778d]">{cand.created_at}</td>
@@ -296,12 +329,20 @@ export function CandidaturesOffreView({
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button
-                      onClick={() => onOpenDetail(cand)}
-                      className="rounded-xl bg-[#594be0] px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-[#483ad3]"
-                    >
-                      Ouvrir (E10)
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setQuickViewCand(cand)}
+                        className="inline-flex items-center gap-1 rounded-xl border border-[#dde1ed] bg-white px-3 py-1.5 text-xs font-bold text-[#4d556c] shadow-2xs hover:bg-[#fafbfc]"
+                      >
+                        <Eye size={12} /> Lire le CV
+                      </button>
+                      <button
+                        onClick={() => onOpenDetail(cand)}
+                        className="inline-flex items-center gap-1 rounded-xl bg-[#594be0] px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-[#483ad3]"
+                      >
+                        <Sparkles size={12} /> Évaluer & Décider
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -313,6 +354,108 @@ export function CandidaturesOffreView({
       <div className="mt-4 text-[11px] font-semibold text-[#8c94a8]">
         ℹ️ Règle éthique : Le score IA est une aide à la sélection. Le tri par date et l'analyse humaine restent souverains.
       </div>
+
+      {/* QUICK VIEW MODAL POUR LIRE LE CV INSTANTANÉMENT */}
+      {quickViewCand && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="relative my-6 w-full max-w-3xl rounded-3xl border border-[#e8ebf3] bg-white p-6 sm:p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setQuickViewCand(null)}
+              className="absolute right-5 top-5 grid size-8 place-items-center rounded-full text-[#959eb4] hover:bg-[#f5f6fa]"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="border-b border-[#f0f2f7] pb-4 flex items-center justify-between pr-8">
+              <div>
+                <span className="rounded-md bg-[#eeeaff] px-2.5 py-0.5 text-[11px] font-bold text-[#5547d7]">
+                  {quickViewCand.cv?.source_type === 'DYNAMIQUE' || quickViewCand.cv?.est_genere ? '✨ CV Dynamique de l\'application' : '📎 Document CV Importé'}
+                </span>
+                <h2 className="mt-2 text-xl font-black text-[#161e31]">
+                  CV de {quickViewCand.candidat?.user?.prenom} {quickViewCand.candidat?.user?.nom}
+                </h2>
+                <p className="text-xs text-[#7f889e]">
+                  {quickViewCand.candidat?.titre || 'Candidat'} · {quickViewCand.candidat?.user?.email} · {quickViewCand.candidat?.ville || 'Tunisie'}
+                </p>
+              </div>
+            </div>
+
+            {/* Corps du CV dans la modale */}
+            <div className="mt-5 space-y-4 text-xs text-[#222a3d]">
+              {/* Pitch */}
+              <div className="rounded-2xl border border-[#eceff6] bg-[#fafbfc] p-4">
+                <span className="font-extrabold text-[#707990] uppercase text-[10px] block mb-1">
+                  Résumé professionnel
+                </span>
+                <p className="text-xs text-[#4b5368] leading-relaxed">
+                  {quickViewCand.candidat?.resume || 'Candidat passionné avec compétences vérifiées.'}
+                </p>
+              </div>
+
+              {/* Compétences */}
+              <div>
+                <span className="font-extrabold text-[#707990] uppercase text-[10px] block mb-1.5">
+                  Compétences techniques
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {(quickViewCand.candidat?.competences || quickViewCand.analyse?.infos_extraites?.competences || []).map((sk) => (
+                    <span key={sk} className="rounded-lg bg-[#eeeaff] px-2.5 py-1 text-xs font-bold text-[#5547d7]">
+                      {sk}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Expériences */}
+              {quickViewCand.candidat?.experiences && quickViewCand.candidat.experiences.length > 0 && (
+                <div>
+                  <span className="font-extrabold text-[#707990] uppercase text-[10px] block mb-1.5">
+                    Expériences professionnelles
+                  </span>
+                  <div className="space-y-2">
+                    {quickViewCand.candidat.experiences.map((exp, i) => (
+                      <div key={i} className="rounded-xl border border-[#e8ebf3] p-3 bg-white">
+                        <div className="flex justify-between font-bold text-[#151c2e]">
+                          <span>{exp.poste} — {exp.employeur}</span>
+                          <span className="text-[#8e97ac] font-normal">{exp.dates}</span>
+                        </div>
+                        <p className="mt-1 text-xs text-[#525a6f]">{exp.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Lettre de motivation si présente */}
+              {quickViewCand.lettre_motivation && (
+                <div className="rounded-2xl border border-[#e5e1fc] bg-[#f7f6ff] p-4 text-xs">
+                  <span className="font-black text-[#5547d7] block mb-1">Mot d'accompagnement :</span>
+                  <p className="italic text-[#4c546b]">« {quickViewCand.lettre_motivation} »</p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-[#f0f2f7] flex items-center justify-end gap-3">
+              <button
+                onClick={() => setQuickViewCand(null)}
+                className="rounded-xl border border-[#dde1ed] px-4 py-2 text-xs font-bold text-[#555d72] hover:bg-[#fafbfc]"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={() => {
+                  const target = quickViewCand;
+                  setQuickViewCand(null);
+                  onOpenDetail(target);
+                }}
+                className="rounded-xl bg-[#594be0] px-5 py-2 text-xs font-black text-white shadow-md hover:bg-[#483ad3] flex items-center gap-1.5"
+              >
+                <Sparkles size={14} /> Passer à l'évaluation & décision complète
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
