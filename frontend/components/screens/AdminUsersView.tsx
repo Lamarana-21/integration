@@ -20,6 +20,7 @@ import {
   Phone,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   Shield,
   Trash2,
@@ -238,11 +239,11 @@ export function AdminUsersView({
     }
   };
 
-  // New user form state
+  // New user form state - Tous les champs sont vides par défaut
   const [newNom, setNewNom] = useState('');
   const [newPrenom, setNewPrenom] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const [newRole, setNewRole] = useState<'CANDIDAT' | 'RECRUTEUR' | 'ADMIN'>('CANDIDAT');
+  const [newRole, setNewRole] = useState<'CANDIDAT' | 'RECRUTEUR' | 'ADMIN'>('RECRUTEUR');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -251,10 +252,70 @@ export function AdminUsersView({
   const [newEntrepriseNom, setNewEntrepriseNom] = useState('');
   const [newTitre, setNewTitre] = useState('');
   const [newTelephone, setNewTelephone] = useState('');
-  const [newVille, setNewVille] = useState('Tunis');
+  const [newVille, setNewVille] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createError, setCreateError] = useState('');
   const [createSuccessMsg, setCreateSuccessMsg] = useState('');
+
+  // Fonction pour vider complètement tous les champs du formulaire
+  const handleClearFields = () => {
+    setNewNom('');
+    setNewPrenom('');
+    setNewEmail('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+    setNewEntrepriseId('');
+    setNewEntrepriseNom('');
+    setNewTitre('');
+    setNewTelephone('');
+    setNewVille('');
+    setCreateError('');
+    setCreateSuccessMsg('');
+  };
+
+  // Réinitialiser et vider les champs à chaque ouverture de la modal
+  useEffect(() => {
+    if (showCreateModal) {
+      handleClearFields();
+      setCreatedCredentialsInfo(null);
+      setCopiedNewCredentials(false);
+    }
+  }, [showCreateModal]);
+
+  // Stockage des identifiants créés pour transmission immédiate au recruteur / utilisateur
+  const [createdCredentialsInfo, setCreatedCredentialsInfo] = useState<{
+    nom: string;
+    prenom: string;
+    email: string;
+    password: string;
+    role: string;
+    entrepriseNom?: string;
+  } | null>(null);
+  const [copiedNewCredentials, setCopiedNewCredentials] = useState(false);
+
+  // Génération rapide d'un mot de passe sécurisé pour l'utilisateur créé
+  const generateRandomNewPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!#$';
+    let pwd = 'Talenta!';
+    for (let i = 0; i < 4; i++) {
+      pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setNewPassword(pwd);
+    setConfirmPassword(pwd);
+    setShowPassword(true);
+    setShowConfirmPassword(true);
+  };
+
+  // Copier le message d'accès à envoyer au recruteur
+  const handleCopyNewCredentials = () => {
+    if (!createdCredentialsInfo) return;
+    const credText = `Bonjour ${createdCredentialsInfo.prenom} ${createdCredentialsInfo.nom},\n\nVotre compte ${createdCredentialsInfo.role === 'RECRUTEUR' ? 'Recruteur' : createdCredentialsInfo.role} sur la plateforme Talenta a été créé par l'administrateur.\n\nVoici vos informations de connexion pour accéder à votre espace :\n- Adresse e-mail : ${createdCredentialsInfo.email}\n- Mot de passe provisoire : ${createdCredentialsInfo.password}\n${createdCredentialsInfo.entrepriseNom ? `- Entreprise rattachée : ${createdCredentialsInfo.entrepriseNom}\n` : ''}- Lien de connexion : ${typeof window !== 'undefined' ? window.location.origin : ''}#login\n\nNous vous recommandons de personnaliser votre mot de passe après votre première connexion.\nÀ bientôt sur Talenta !`;
+    navigator.clipboard.writeText(credText);
+    setCopiedNewCredentials(true);
+    setTimeout(() => setCopiedNewCredentials(false), 3000);
+  };
 
   const filteredUsers = users.filter((u) => {
     if (roleFilter !== 'TOUS' && u.role?.nom !== roleFilter) return false;
@@ -309,20 +370,20 @@ export function AdminUsersView({
         return;
       }
 
-      setCreateSuccessMsg(`Le compte ${newPrenom} ${newNom} (${newRole}) a bien été créé et sauvegardé dans la base de données.`);
-      setTimeout(() => {
-        setNewNom('');
-        setNewPrenom('');
-        setNewEmail('');
-        setNewPassword('');
-        setConfirmPassword('');
-        setNewEntrepriseId('');
-        setNewEntrepriseNom('');
-        setNewTitre('');
-        setNewTelephone('');
-        setCreateSuccessMsg('');
-        setShowCreateModal(false);
-      }, 1500);
+      const entObj = entreprises.find((e) => e.id === newEntrepriseId);
+      const resolvedEntrepriseNom = entObj?.nom || newEntrepriseNom || undefined;
+
+      // Conserver les identifiants pour que l'admin puisse les copier et les fournir au recruteur
+      setCreatedCredentialsInfo({
+        nom: newNom.trim(),
+        prenom: newPrenom.trim(),
+        email: newEmail.trim().toLowerCase(),
+        password: newPassword,
+        role: newRole,
+        entrepriseNom: resolvedEntrepriseNom,
+      });
+
+      setCreateSuccessMsg(`Le compte ${newPrenom} ${newNom} (${newRole}) a été créé et sauvegardé dans MySQL avec succès !`);
     } catch (err: any) {
       setCreateError(err.message || 'Erreur inattendue.');
     } finally {
@@ -335,24 +396,14 @@ export function AdminUsersView({
       {/* Top Header (E12) */}
       <div className="flex flex-col justify-between gap-4 border-b border-[#eef1f7] pb-5 sm:flex-row sm:items-center">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-[#8c94a9] uppercase tracking-wider">
-              Administration système
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#edf9f3] px-2.5 py-0.5 text-[11px] font-bold text-[#248e56] border border-[#c3eed7]">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#27ae60] opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#27ae60]"></span>
-              </span>
-              <Database size={11} />
-              <span>Base MySQL connectée</span>
-            </span>
-          </div>
+          <span className="text-xs font-bold text-[#8c94a9] uppercase tracking-wider">
+            Administration système
+          </span>
           <h1 className="mt-1 text-2xl font-black text-[#171f33]">
             Gestion des utilisateurs
           </h1>
           <p className="mt-1 text-xs text-[#7e879c]">
-            {users.length} comptes synchronisés en direct depuis la base de données MySQL (candidats, recruteurs, admins).
+            {users.length} comptes enregistrés (candidats, recruteurs, administrateurs).
           </p>
         </div>
 
@@ -363,10 +414,10 @@ export function AdminUsersView({
               onClick={handleRefresh}
               disabled={isRefreshing}
               className="flex items-center gap-1.5 rounded-2xl border border-[#dde1ec] bg-white px-4 py-2.5 text-xs font-bold text-[#444f69] hover:bg-[#f6f8fc] hover:text-[#171f33] transition shadow-xs disabled:opacity-50"
-              title="Recharger tous les utilisateurs depuis la base de données MySQL"
+              title="Recharger la liste des utilisateurs"
             >
               <RefreshCw size={14} className={isRefreshing ? 'animate-spin text-[#594be0]' : ''} />
-              <span>{isRefreshing ? 'Synchronisation...' : 'Actualiser BDD'}</span>
+              <span>{isRefreshing ? 'Actualisation...' : 'Actualiser'}</span>
             </button>
           )}
 
@@ -534,16 +585,27 @@ export function AdminUsersView({
                   Créer un compte utilisateur
                 </h3>
                 <p className="text-xs text-[#7e879c] mt-0.5">
-                  L'utilisateur sera automatiquement enregistré dans la base de données MySQL et pourra se connecter immédiatement.
+                  L'utilisateur sera automatiquement créé et pourra se connecter immédiatement.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(false)}
-                className="rounded-xl p-1.5 text-[#8c96ac] hover:bg-[#f1f3f8] hover:text-[#171f33]"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleClearFields}
+                  className="flex items-center gap-1.5 rounded-xl border border-[#dfe3ee] bg-[#f8f9fc] px-3 py-1.5 text-xs font-bold text-[#5c6579] hover:bg-[#edf0f7] hover:text-[#182033] transition cursor-pointer"
+                  title="Vider tous les champs du formulaire"
+                >
+                  <RotateCcw size={12} />
+                  <span>Vider les champs</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="rounded-xl p-1.5 text-[#8c96ac] hover:bg-[#f1f3f8] hover:text-[#171f33] cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Notifications Erreur / Succès */}
@@ -561,269 +623,411 @@ export function AdminUsersView({
               </div>
             )}
 
-            <form onSubmit={handleCreate} className="mt-5 space-y-4 text-xs">
-              {/* 1. Sélection du Rôle (Boutons Visuels Modernes) */}
-              <div>
-                <label className="block font-bold text-[#353e54] mb-1.5">
-                  Type de profil & Rôle *
-                </label>
-                <div className="grid grid-cols-3 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setNewRole('CANDIDAT')}
-                    className={`flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition ${
-                      newRole === 'CANDIDAT'
-                        ? 'border-[#594be0] bg-[#f0efff] text-[#594be0] ring-2 ring-[#594be0]/20'
-                        : 'border-[#e4e7f0] bg-white text-[#555e75] hover:bg-[#fafbfe]'
-                    }`}
-                  >
-                    <User size={18} />
-                    <span className="font-extrabold text-[11px]">Candidat</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setNewRole('RECRUTEUR')}
-                    className={`flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition ${
-                      newRole === 'RECRUTEUR'
-                        ? 'border-[#594be0] bg-[#f0efff] text-[#594be0] ring-2 ring-[#594be0]/20'
-                        : 'border-[#e4e7f0] bg-white text-[#555e75] hover:bg-[#fafbfe]'
-                    }`}
-                  >
-                    <Building2 size={18} />
-                    <span className="font-extrabold text-[11px]">Recruteur</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setNewRole('ADMIN')}
-                    className={`flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition ${
-                      newRole === 'ADMIN'
-                        ? 'border-[#c93232] bg-[#ffe8e8] text-[#c93232] ring-2 ring-[#c93232]/20'
-                        : 'border-[#e4e7f0] bg-white text-[#555e75] hover:bg-[#fafbfe]'
-                    }`}
-                  >
-                    <Shield size={18} />
-                    <span className="font-extrabold text-[11px]">Admin</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* 2. Coordonnées d'identité */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-[#353e54] mb-1">Nom *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Ben Salem"
-                    value={newNom ?? ''}
-                    onChange={(e) => setNewNom(e.target.value)}
-                    className="w-full rounded-2xl border border-[#dde1ed] bg-white px-3.5 py-2.5 text-xs text-[#1e2538] outline-none focus:border-[#594be0] focus:ring-2 focus:ring-[#594be0]/15"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-[#353e54] mb-1">Prénom *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Amina"
-                    value={newPrenom ?? ''}
-                    onChange={(e) => setNewPrenom(e.target.value)}
-                    className="w-full rounded-2xl border border-[#dde1ed] bg-white px-3.5 py-2.5 text-xs text-[#1e2538] outline-none focus:border-[#594be0] focus:ring-2 focus:ring-[#594be0]/15"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-[#353e54] mb-1">Adresse e-mail de connexion *</label>
-                <div className="flex items-center gap-2 rounded-2xl border border-[#dde1ed] bg-white px-3.5 py-2.5 focus-within:border-[#594be0] focus-within:ring-2 focus-within:ring-[#594be0]/15">
-                  <Mail size={15} className="text-[#98a2b8]" />
-                  <input
-                    type="email"
-                    required
-                    placeholder="utilisateur@example.com"
-                    value={newEmail ?? ''}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    className="w-full bg-transparent text-xs text-[#1e2538] outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* 3. Champs conditionnels selon le Rôle */}
-              {newRole === 'RECRUTEUR' && (
-                <div className="rounded-2xl bg-[#fafbfe] border border-[#e8ebf5] p-3.5 space-y-3">
-                  <div className="font-bold text-[#1e2538] flex items-center gap-1.5 text-xs">
-                    <Building2 size={14} className="text-[#594be0]" />
-                    Rattachement Entreprise
+            {/* Vue après création réussie : Récapitulatif et Copie des accès à fournir */}
+            {createdCredentialsInfo ? (
+              <div className="mt-5 space-y-4">
+                <div className="rounded-2xl border border-[#c4ebd3] bg-[#edf9f3] p-4 text-center">
+                  <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-[#248e56] text-white shadow-md shadow-[#248e56]/25">
+                    <CheckCircle2 size={24} />
                   </div>
+                  <h4 className="mt-2 text-base font-black text-[#171f33]">
+                    Compte {createdCredentialsInfo.role === 'RECRUTEUR' ? 'Recruteur' : createdCredentialsInfo.role} créé avec succès !
+                  </h4>
+                  <p className="mt-1 text-xs text-[#525d74]">
+                    Le compte est actif. Vous pouvez maintenant copier et transmettre ces identifiants au recruteur pour qu'il puisse se connecter :
+                  </p>
+                </div>
 
-                  <div>
-                    <label className="block font-semibold text-[#525b72] mb-1">Sélectionner une entreprise existante :</label>
-                    <select
-                      value={newEntrepriseId}
-                      onChange={(e) => {
-                        setNewEntrepriseId(e.target.value);
-                        if (e.target.value) setNewEntrepriseNom('');
-                      }}
-                      className="w-full rounded-xl border border-[#dde1ed] bg-white p-2 text-xs font-medium text-[#1e2538] outline-none"
-                    >
-                      <option value="">-- Ou saisir une nouvelle entreprise ci-dessous --</option>
-                      {entreprises.map((ent) => (
-                        <option key={ent.id} value={ent.id}>
-                          {ent.nom} ({ent.ville})
-                        </option>
-                      ))}
-                    </select>
+                {/* Bloc d'identifiants à fournir */}
+                <div className="rounded-2xl border border-[#e4e8f2] bg-[#f8f9fd] p-4 space-y-2.5 text-xs">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#eceff6]">
+                    <span className="font-bold text-[#657089]">Utilisateur :</span>
+                    <span className="font-black text-[#171f33]">{createdCredentialsInfo.prenom} {createdCredentialsInfo.nom}</span>
                   </div>
-
-                  {!newEntrepriseId && (
-                    <div>
-                      <label className="block font-semibold text-[#525b72] mb-1">Ou Nom de la nouvelle entreprise :</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: Société Gamma SARL"
-                        value={newEntrepriseNom ?? ''}
-                        onChange={(e) => setNewEntrepriseNom(e.target.value)}
-                        className="w-full rounded-xl border border-[#dde1ed] bg-white px-3 py-2 text-xs text-[#1e2538] outline-none"
-                      />
+                  <div className="flex items-center justify-between pb-2 border-b border-[#eceff6]">
+                    <span className="font-bold text-[#657089]">Rôle attribué :</span>
+                    <span className="font-extrabold text-[#594be0] bg-[#f0efff] px-2.5 py-0.5 rounded-full text-[11px]">
+                      {createdCredentialsInfo.role}
+                    </span>
+                  </div>
+                  {createdCredentialsInfo.entrepriseNom && (
+                    <div className="flex items-center justify-between pb-2 border-b border-[#eceff6]">
+                      <span className="font-bold text-[#657089]">Entreprise rattachée :</span>
+                      <span className="font-bold text-[#171f33]">{createdCredentialsInfo.entrepriseNom}</span>
                     </div>
                   )}
+                  <div className="flex items-center justify-between pb-2 border-b border-[#eceff6]">
+                    <span className="font-bold text-[#657089]">E-mail de connexion :</span>
+                    <span className="font-black text-[#171f33] font-mono bg-white px-2 py-1 rounded-lg border border-[#e2e5ef]">
+                      {createdCredentialsInfo.email}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[#657089]">Mot de passe provisoire :</span>
+                    <span className="font-black text-[#594be0] font-mono bg-white px-2.5 py-1 rounded-lg border border-[#e2e5ef]">
+                      {createdCredentialsInfo.password}
+                    </span>
+                  </div>
+                </div>
 
+                {/* Bouton de copie du message pour le recruteur */}
+                <button
+                  type="button"
+                  onClick={handleCopyNewCredentials}
+                  className={`w-full py-3 px-4 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-md ${
+                    copiedNewCredentials
+                      ? 'bg-[#248e56] text-white shadow-[#248e56]/20'
+                      : 'bg-[#594be0] text-white shadow-[#594be0]/25 hover:bg-[#483ad3]'
+                  }`}
+                >
+                  {copiedNewCredentials ? (
+                    <>
+                      <Check size={16} />
+                      Informations de connexion copiées dans le presse-papier !
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={16} />
+                      Copier les informations à fournir au recruteur
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#edf0f7]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreatedCredentialsInfo(null);
+                      setShowCreateModal(false);
+                      setNewNom('');
+                      setNewPrenom('');
+                      setNewEmail('');
+                      setNewPassword('');
+                      setConfirmPassword('');
+                      setNewEntrepriseId('');
+                      setNewEntrepriseNom('');
+                    }}
+                    className="rounded-xl bg-[#f0f2f8] px-4 py-2.5 text-xs font-bold text-[#444c60] hover:bg-[#e4e7f0] transition cursor-pointer"
+                  >
+                    Fermer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreatedCredentialsInfo(null);
+                      setNewNom('');
+                      setNewPrenom('');
+                      setNewEmail('');
+                      setNewPassword('');
+                      setConfirmPassword('');
+                      setNewEntrepriseId('');
+                      setNewEntrepriseNom('');
+                    }}
+                    className="rounded-xl border border-[#d8dce8] bg-white px-4 py-2.5 text-xs font-bold text-[#594be0] hover:bg-[#f6f5fe] transition cursor-pointer"
+                  >
+                    Créer un autre compte
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleCreate} autoComplete="off" className="mt-5 space-y-4 text-xs">
+                {/* Empêcher le navigateur d'injecter automatiquement les identifiants enregistrés */}
+                <input type="text" name="fake_username_anti_autofill" className="hidden" tabIndex={-1} autoComplete="off" />
+                <input type="password" name="fake_password_anti_autofill" className="hidden" tabIndex={-1} autoComplete="off" />
+
+                {/* Information Recruteur */}
+                {newRole === 'RECRUTEUR' && (
+                  <div className="rounded-2xl border border-[#eceafc] bg-[#f8f7fe] p-3 text-xs text-[#4e44b8] flex items-start gap-2.5">
+                    <Building2 size={16} className="shrink-0 mt-0.5 text-[#594be0]" />
+                    <span className="leading-relaxed text-[11px]">
+                      <strong>Création d'un compte Recruteur :</strong> L'e-mail et le mot de passe définis ici serviront au recruteur pour se connecter. Vous pourrez copier en 1 clic les identifiants complets dès la création.
+                    </span>
+                  </div>
+                )}
+
+                {/* 1. Sélection du Rôle (Boutons Visuels Modernes) */}
+                <div>
+                  <label className="block font-bold text-[#353e54] mb-1.5">
+                    Type de profil & Rôle *
+                  </label>
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setNewRole('CANDIDAT')}
+                      className={`flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition ${
+                        newRole === 'CANDIDAT'
+                          ? 'border-[#594be0] bg-[#f0efff] text-[#594be0] ring-2 ring-[#594be0]/20'
+                          : 'border-[#e4e7f0] bg-white text-[#555e75] hover:bg-[#fafbfe]'
+                      }`}
+                    >
+                      <User size={18} />
+                      <span className="font-extrabold text-[11px]">Candidat</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setNewRole('RECRUTEUR')}
+                      className={`flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition ${
+                        newRole === 'RECRUTEUR'
+                          ? 'border-[#594be0] bg-[#f0efff] text-[#594be0] ring-2 ring-[#594be0]/20'
+                          : 'border-[#e4e7f0] bg-white text-[#555e75] hover:bg-[#fafbfe]'
+                      }`}
+                    >
+                      <Building2 size={18} />
+                      <span className="font-extrabold text-[11px]">Recruteur</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setNewRole('ADMIN')}
+                      className={`flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition ${
+                        newRole === 'ADMIN'
+                          ? 'border-[#c93232] bg-[#ffe8e8] text-[#c93232] ring-2 ring-[#c93232]/20'
+                          : 'border-[#e4e7f0] bg-white text-[#555e75] hover:bg-[#fafbfe]'
+                      }`}
+                    >
+                      <Shield size={18} />
+                      <span className="font-extrabold text-[11px]">Admin</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Coordonnées d'identité */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-semibold text-[#525b72] mb-1">Téléphone professionnel :</label>
+                    <label className="block font-bold text-[#353e54] mb-1">Nom *</label>
                     <input
                       type="text"
-                      placeholder="Ex: +216 71 000 000"
-                      value={newTelephone ?? ''}
-                      onChange={(e) => setNewTelephone(e.target.value)}
-                      className="w-full rounded-xl border border-[#dde1ed] bg-white px-3 py-2 text-xs text-[#1e2538] outline-none"
+                      required
+                      placeholder="Ex: Ben Salem"
+                      value={newNom ?? ''}
+                      onChange={(e) => setNewNom(e.target.value)}
+                      className="w-full rounded-2xl border border-[#dde1ed] bg-white px-3.5 py-2.5 text-xs text-[#1e2538] outline-none focus:border-[#594be0] focus:ring-2 focus:ring-[#594be0]/15"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-[#353e54] mb-1">Prénom *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: Amina"
+                      value={newPrenom ?? ''}
+                      onChange={(e) => setNewPrenom(e.target.value)}
+                      className="w-full rounded-2xl border border-[#dde1ed] bg-white px-3.5 py-2.5 text-xs text-[#1e2538] outline-none focus:border-[#594be0] focus:ring-2 focus:ring-[#594be0]/15"
                     />
                   </div>
                 </div>
-              )}
 
-              {newRole === 'CANDIDAT' && (
-                <div className="rounded-2xl bg-[#fafbfe] border border-[#e8ebf5] p-3.5 space-y-3">
-                  <div className="font-bold text-[#1e2538] flex items-center gap-1.5 text-xs">
-                    <FileText size={14} className="text-[#594be0]" />
-                    Informations Candidat
+                <div>
+                  <label className="block font-bold text-[#353e54] mb-1">Adresse e-mail de connexion *</label>
+                  <div className="flex items-center gap-2 rounded-2xl border border-[#dde1ed] bg-white px-3.5 py-2.5 focus-within:border-[#594be0] focus-within:ring-2 focus-within:ring-[#594be0]/15">
+                    <Mail size={15} className="text-[#98a2b8]" />
+                    <input
+                      type="email"
+                      name="admin_new_user_email_empty"
+                      autoComplete="new-email"
+                      required
+                      placeholder="utilisateur@example.com"
+                      value={newEmail ?? ''}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      className="w-full bg-transparent text-xs text-[#1e2538] outline-none [&:-webkit-autofill]:shadow-[0_0_0_1000px_white_inset] [&:-webkit-autofill]:-webkit-text-fill-color-[#1e2538]"
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Champs conditionnels selon le Rôle */}
+                {newRole === 'RECRUTEUR' && (
+                  <div className="rounded-2xl bg-[#fafbfe] border border-[#e8ebf5] p-3.5 space-y-3">
+                    <div className="font-bold text-[#1e2538] flex items-center gap-1.5 text-xs">
+                      <Building2 size={14} className="text-[#594be0]" />
+                      Rattachement Entreprise
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-[#525b72] mb-1">Sélectionner une entreprise existante :</label>
+                      <select
+                        value={newEntrepriseId}
+                        onChange={(e) => {
+                          setNewEntrepriseId(e.target.value);
+                          if (e.target.value) setNewEntrepriseNom('');
+                        }}
+                        className="w-full rounded-xl border border-[#dde1ed] bg-white p-2 text-xs font-medium text-[#1e2538] outline-none"
+                      >
+                        <option value="">-- Ou saisir une nouvelle entreprise ci-dessous --</option>
+                        {entreprises.map((ent) => (
+                          <option key={ent.id} value={ent.id}>
+                            {ent.nom} ({ent.ville})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {!newEntrepriseId && (
+                      <div>
+                        <label className="block font-semibold text-[#525b72] mb-1">Ou Nom de la nouvelle entreprise :</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Société Gamma SARL"
+                          value={newEntrepriseNom ?? ''}
+                          onChange={(e) => setNewEntrepriseNom(e.target.value)}
+                          className="w-full rounded-xl border border-[#dde1ed] bg-white px-3 py-2 text-xs text-[#1e2538] outline-none"
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block font-semibold text-[#525b72] mb-1">Téléphone professionnel :</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: +216 71 000 000"
+                        value={newTelephone ?? ''}
+                        onChange={(e) => setNewTelephone(e.target.value)}
+                        className="w-full rounded-xl border border-[#dde1ed] bg-white px-3 py-2 text-xs text-[#1e2538] outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {newRole === 'CANDIDAT' && (
+                  <div className="rounded-2xl bg-[#fafbfe] border border-[#e8ebf5] p-3.5 space-y-3">
+                    <div className="font-bold text-[#1e2538] flex items-center gap-1.5 text-xs">
+                      <FileText size={14} className="text-[#594be0]" />
+                      Informations Candidat
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-semibold text-[#525b72] mb-1">Titre professionnel :</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Développeuse Full Stack"
+                          value={newTitre ?? ''}
+                          onChange={(e) => setNewTitre(e.target.value)}
+                          className="w-full rounded-xl border border-[#dde1ed] bg-white px-3 py-2 text-xs text-[#1e2538] outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-[#525b72] mb-1">Ville de résidence :</label>
+                        <input
+                          type="text"
+                          name="admin_new_user_ville"
+                          autoComplete="off"
+                          placeholder="Ex: Tunis, Sfax, Sousse..."
+                          value={newVille ?? ''}
+                          onChange={(e) => setNewVille(e.target.value)}
+                          className="w-full rounded-xl border border-[#dde1ed] bg-white px-3 py-2 text-xs text-[#1e2538] outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Mots de passe & Confirmation avec bouton Générer */}
+                <div className="rounded-2xl bg-[#fafbfc] border border-[#edf0f7] p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="font-bold text-[#1e2538] flex items-center gap-1.5 text-xs">
+                      <Lock size={14} className="text-[#594be0]" />
+                      Sécurité & Mot de passe du compte
+                    </div>
+                    <button
+                      type="button"
+                      onClick={generateRandomNewPassword}
+                      className="text-[11px] font-bold text-[#594be0] hover:underline flex items-center gap-1 cursor-pointer bg-[#f0efff] px-2.5 py-1 rounded-lg"
+                      title="Générer un mot de passe sécurisé en 1 clic"
+                    >
+                      <Key size={12} /> Générer auto
+                    </button>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-semibold text-[#525b72] mb-1">Titre professionnel :</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: Développeuse Full Stack"
-                        value={newTitre ?? ''}
-                        onChange={(e) => setNewTitre(e.target.value)}
-                        className="w-full rounded-xl border border-[#dde1ed] bg-white px-3 py-2 text-xs text-[#1e2538] outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-[#525b72] mb-1">Ville de résidence :</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: Sfax ou Tunis"
-                        value={newVille ?? ''}
-                        onChange={(e) => setNewVille(e.target.value)}
-                        className="w-full rounded-xl border border-[#dde1ed] bg-white px-3 py-2 text-xs text-[#1e2538] outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* 4. Mots de passe & Confirmation */}
-              <div className="rounded-2xl bg-[#fafbfc] border border-[#edf0f7] p-3.5 space-y-3">
-                <div className="font-bold text-[#1e2538] flex items-center gap-1.5 text-xs">
-                  <Lock size={14} className="text-[#594be0]" />
-                  Sécurité & Mot de passe du compte
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-[#353e54] mb-1">
-                      Mot de passe * (min. 8 car.)
-                    </label>
-                    <div className="flex items-center gap-2 rounded-2xl border border-[#dde1ed] bg-white px-3.5 py-2 focus-within:border-[#594be0]">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        required
-                        minLength={8}
-                        placeholder="••••••••"
-                        value={newPassword ?? ''}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        className="w-full bg-transparent text-xs text-[#1e2538] outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="text-[#96a0b5] hover:text-[#171f33]"
-                      >
-                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block font-bold text-[#353e54]">
-                        Confirmer mot de passe *
+                      <label className="block font-bold text-[#353e54] mb-1">
+                        Mot de passe * (min. 8 car.)
                       </label>
-                      {confirmPassword && (
-                        <span
-                          className={`text-[10px] font-bold ${
-                            newPassword === confirmPassword ? 'text-[#248e56]' : 'text-[#cf3b3b]'
-                          }`}
+                      <div className="flex items-center gap-2 rounded-2xl border border-[#dde1ed] bg-white px-3.5 py-2 focus-within:border-[#594be0]">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          name="admin_new_user_pwd_field"
+                          id="admin_new_user_pwd_field"
+                          autoComplete="new-password"
+                          required
+                          minLength={8}
+                          placeholder="••••••••"
+                          value={newPassword ?? ''}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="w-full bg-transparent text-xs text-[#1e2538] outline-none [&:-webkit-autofill]:shadow-[0_0_0_1000px_white_inset] [&:-webkit-autofill]:-webkit-text-fill-color-[#1e2538]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="text-[#96a0b5] hover:text-[#171f33]"
                         >
-                          {newPassword === confirmPassword ? '✓ Correspond' : '✗ Différent'}
-                        </span>
-                      )}
+                          {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 rounded-2xl border border-[#dde1ed] bg-white px-3.5 py-2 focus-within:border-[#594be0]">
-                      <input
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        required
-                        minLength={8}
-                        placeholder="••••••••"
-                        value={confirmPassword ?? ''}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="w-full bg-transparent text-xs text-[#1e2538] outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="text-[#96a0b5] hover:text-[#171f33]"
-                      >
-                        {showConfirmPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block font-bold text-[#353e54]">
+                          Confirmer mot de passe *
+                        </label>
+                        {confirmPassword && (
+                          <span
+                            className={`text-[10px] font-bold ${
+                              newPassword === confirmPassword ? 'text-[#248e56]' : 'text-[#cf3b3b]'
+                            }`}
+                          >
+                            {newPassword === confirmPassword ? '✓ Correspond' : '✗ Différent'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 rounded-2xl border border-[#dde1ed] bg-white px-3.5 py-2 focus-within:border-[#594be0]">
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          name="admin_new_user_conf_pwd_field"
+                          id="admin_new_user_conf_pwd_field"
+                          autoComplete="new-password"
+                          required
+                          minLength={8}
+                          placeholder="••••••••"
+                          value={confirmPassword ?? ''}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="w-full bg-transparent text-xs text-[#1e2538] outline-none [&:-webkit-autofill]:shadow-[0_0_0_1000px_white_inset] [&:-webkit-autofill]:-webkit-text-fill-color-[#1e2538]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="text-[#96a0b5] hover:text-[#171f33]"
+                        >
+                          {showConfirmPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Boutons d'action */}
-              <div className="mt-6 flex items-center justify-end gap-2.5 pt-2 border-t border-[#edf0f7]">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  disabled={isSubmitting}
-                  className="rounded-xl border border-[#d8dce8] bg-white px-4 py-2.5 font-bold text-[#5c657a] hover:bg-[#f6f7fa] transition"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex items-center gap-2 rounded-xl bg-[#594be0] px-5 py-2.5 font-bold text-white shadow-md shadow-[#594be0]/25 hover:bg-[#483ad3] transition disabled:opacity-50"
-                >
-                  <UserPlus size={15} />
-                  {isSubmitting ? 'Enregistrement en BDD...' : 'Créer et enregistrer en base'}
-                </button>
-              </div>
-            </form>
+                {/* Boutons d'action */}
+                <div className="mt-6 flex items-center justify-end gap-2.5 pt-2 border-t border-[#edf0f7]">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    disabled={isSubmitting}
+                    className="rounded-xl border border-[#d8dce8] bg-white px-4 py-2.5 font-bold text-[#5c657a] hover:bg-[#f6f7fa] transition cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex items-center gap-2 rounded-xl bg-[#594be0] px-5 py-2.5 font-bold text-white shadow-md shadow-[#594be0]/25 hover:bg-[#483ad3] transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <UserPlus size={15} />
+                    {isSubmitting ? 'Enregistrement en cours...' : 'Créer et obtenir les accès'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

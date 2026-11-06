@@ -47,6 +47,9 @@ export function NouvelleOffreView({
     initialOffre?.competences_requises || ['React', 'Node.js', 'SQL']
   );
   const [newComp, setNewComp] = useState('');
+  const [datePublication, setDatePublication] = useState(
+    initialOffre?.date_publication || new Date().toISOString().split('T')[0]
+  );
   const [dateLimite, setDateLimite] = useState(
     initialOffre?.date_limite || '2026-11-30'
   );
@@ -68,7 +71,11 @@ export function NouvelleOffreView({
     if (!titre.trim()) return 'Le titre de l’offre est obligatoire.';
     if (!lieu.trim()) return 'Le lieu est obligatoire.';
     if (!description.trim()) return 'La description du poste est obligatoire.';
+    if (!datePublication) return 'La date de publication est obligatoire.';
     if (!dateLimite) return 'La date limite de candidature est obligatoire.';
+    if (new Date(dateLimite) < new Date(datePublication)) {
+      return 'La date limite de candidature doit être postérieure ou égale à la date de publication.';
+    }
     return null;
   };
 
@@ -89,6 +96,7 @@ export function NouvelleOffreView({
         description,
         missions,
         competences_requises: competences,
+        date_publication: datePublication,
         date_limite: dateLimite,
         entreprise_id: entrepriseId,
         statut: publishImmediately ? 'PUBLIEE' : 'BROUILLON',
@@ -274,17 +282,32 @@ export function NouvelleOffreView({
           </div>
         </div>
 
-        <div>
-          <label className="text-xs font-bold text-[#20283c]">
-            Date limite de candidature * (doit être future)
-          </label>
-          <input
-            type="date"
-            required
-            value={dateLimite}
-            onChange={(e) => setDateLimite(e.target.value)}
-            className="mt-1.5 w-full max-w-xs rounded-xl border border-[#e2e5ef] bg-[#fafbfc] px-3.5 py-2.5 text-xs text-[#1a2133] outline-none"
-          />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="text-xs font-bold text-[#20283c]">
+              Date de publication *
+            </label>
+            <input
+              type="date"
+              required
+              value={datePublication}
+              onChange={(e) => setDatePublication(e.target.value)}
+              className="mt-1.5 w-full rounded-xl border border-[#e2e5ef] bg-[#fafbfc] px-3.5 py-2.5 text-xs text-[#1a2133] outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-[#20283c]">
+              Date limite de candidature *
+            </label>
+            <input
+              type="date"
+              required
+              value={dateLimite}
+              onChange={(e) => setDateLimite(e.target.value)}
+              className="mt-1.5 w-full rounded-xl border border-[#e2e5ef] bg-[#fafbfc] px-3.5 py-2.5 text-xs text-[#1a2133] outline-none"
+            />
+          </div>
         </div>
 
         {/* Buttons (E8) */}

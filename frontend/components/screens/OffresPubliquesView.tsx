@@ -17,7 +17,16 @@ import {
   Search,
   Sparkles,
 } from 'lucide-react';
-import { ContractType, Offre, RoleName, User, isJobFavorited } from '@/lib/types';
+import {
+  ContractType,
+  Offre,
+  RoleName,
+  User,
+  isJobFavorited,
+  isOfferExpired,
+  hasCandidateAppliedToJob,
+  formatFrenchDate,
+} from '@/lib/types';
 
 interface OffresPubliquesViewProps {
   offres: Offre[];
@@ -30,16 +39,6 @@ interface OffresPubliquesViewProps {
   onToggleFavori?: (offreId: string) => void;
   onContactRecruiter?: (offre: Offre) => void;
 }
-
-const formatFrenchDate = (dateStr?: string) => {
-  if (!dateStr) return '';
-  const clean = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
-  const parts = clean.split('-');
-  if (parts.length === 3) {
-    return `${parts[2]}/${parts[1]}/${parts[0]}`;
-  }
-  return clean;
-};
 
 export function OffresPubliquesView({
   offres,
@@ -59,15 +58,11 @@ export function OffresPubliquesView({
   const [sortBy, setSortBy] = useState<'recent' | 'titre'>('recent');
   const [selectedJob, setSelectedJob] = useState<Offre | null>(null);
 
-  // Filtrage selon RM1 (Visible uniquement si PUBLIEE et date_limite non dépassée)
+  // Filtrage selon le rôle (les visiteurs et candidats voient les offres PUBLIEES)
   const filteredOffres = useMemo(() => {
     return offres.filter((offre) => {
-      // RM1
       if (currentRole === 'VISITEUR' || currentRole === 'CANDIDAT') {
         if (offre.statut !== 'PUBLIEE') return false;
-        if (offre.date_limite && new Date(offre.date_limite) < new Date('2026-10-23')) {
-          return false;
-        }
       }
 
       if (searchTerm) {
@@ -108,8 +103,8 @@ export function OffresPubliquesView({
 
   // If a job is selected for detail view (E3)
   if (selectedJob) {
-    const hasApplied = candidatureOffreIds.includes(selectedJob.id);
-    const isClosed = selectedJob.statut === 'CLOTUREE';
+    const hasApplied = hasCandidateAppliedToJob(selectedJob.id, candidatureOffreIds);
+    const isClosed = selectedJob.statut === 'CLOTUREE' || isOfferExpired(selectedJob.date_limite);
 
     return (
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
@@ -128,14 +123,25 @@ export function OffresPubliquesView({
                 <span className="rounded-md bg-[#eeeaff] px-2.5 py-0.5 text-xs font-extrabold text-[#594be0]">
                   {selectedJob.type_contrat}
                 </span>
-                <span className="rounded-md bg-[#eef8f2] px-2.5 py-0.5 text-xs font-bold text-[#2d9a62]">
-                  {selectedJob.statut}
+                <span
+                  className={`rounded-md px-2.5 py-0.5 text-xs font-bold ${
+                    isClosed
+                      ? 'bg-[#fef2f2] text-[#dc2626] border border-[#fecaca]'
+                      : 'bg-[#eef8f2] text-[#2d9a62]'
+                  }`}
+                >
+                  {isClosed ? 'CLÔTURÉE' : selectedJob.statut}
                 </span>
+                {hasApplied && (
+                  <span className="rounded-md bg-[#e8f7ee] border border-[#a7f3d0] px-2.5 py-0.5 text-xs font-extrabold text-[#2a955e]">
+                    ✓ Candidature envoyée
+                  </span>
+                )}
               </div>
               <h1 className="mt-3 text-2xl font-black tracking-tight text-[#171f33] sm:text-3xl">
                 {selectedJob.titre}
               </h1>
-              <div className="mt-2 flex flex-wrap items-center gap-4 text-xs font-medium text-[#727a90]">
+              <div className="mt-2.5 flex flex-wrap items-center gap-4 text-xs font-medium text-[#727a90]">
                 <span className="flex items-center gap-1 font-semibold text-[#1e2538]">
                   <Building2 size={15} className="text-[#6458e8]" />
                   {selectedJob.entreprise?.nom}
@@ -144,13 +150,13 @@ export function OffresPubliquesView({
                   <MapPin size={15} /> {selectedJob.lieu}
                 </span>
                 {selectedJob.date_publication && (
-                  <span className="flex items-center gap-1">
-                    <Calendar size={15} /> Publiée le {formatFrenchDate(selectedJob.date_publication)}
+                  <span className="flex items-center gap-1 text-[#475569]">
+                    <Calendar size={15} className="text-[#594be0]" /> Publiée le : <strong className="text-[#0f172a]">{formatFrenchDate(selectedJob.date_publication)}</strong>
                   </span>
                 )}
                 {selectedJob.date_limite && (
-                  <span className="flex items-center gap-1 text-[#b54b4b] font-bold">
-                    <Clock size={15} /> Limite : {formatFrenchDate(selectedJob.date_limite)}
+                  <span className={`flex items-center gap-1 ${isClosed ? 'text-[#dc2626] font-bold' : 'text-[#475569]'}`}>
+                    <Clock size={15} className={isClosed ? 'text-[#dc2626]' : 'text-[#594be0]'} /> Date limite : <strong className={isClosed ? 'text-[#dc2626]' : 'text-[#0f172a]'}>{formatFrenchDate(selectedJob.date_limite)}</strong>
                   </span>
                 )}
               </div>
@@ -196,24 +202,31 @@ export function OffresPubliquesView({
               )}
 
               {currentRole === 'VISITEUR' ? (
-                <button
-                  onClick={() => onPostuler(selectedJob)}
-                  className="rounded-2xl bg-[#594be0] px-6 py-3.5 text-xs font-bold text-white shadow-md hover:bg-[#483ad3]"
-                >
-                  Se connecter pour postuler
-                </button>
+                isClosed ? (
+                  <button
+                    disabled
+                    className="cursor-not-allowed rounded-2xl bg-[#e3e6ee] px-6 py-3.5 text-xs font-bold text-[#8890a4]"
+                  >
+                    Candidatures closes (Date limite dépassée)
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => onPostuler(selectedJob)}
+                    className="rounded-2xl bg-[#594be0] px-6 py-3.5 text-xs font-bold text-white shadow-md hover:bg-[#483ad3]"
+                  >
+                    Se connecter pour postuler
+                  </button>
+                )
+              ) : isClosed ? (
+                <div className="flex items-center gap-2 rounded-2xl bg-[#fef2f2] px-5 py-3 text-xs font-bold text-[#991b1b] border border-[#fecaca]">
+                  <Clock size={16} />
+                  <span>Candidatures closes (Date limite dépassée)</span>
+                </div>
               ) : hasApplied ? (
                 <div className="flex items-center gap-2 rounded-2xl bg-[#edf9f3] px-5 py-3 text-xs font-bold text-[#2b965f] border border-[#cbeedc]">
                   <CheckCircle2 size={17} />
-                  Candidature envoyée {'{Reçue}'}
+                  <span>Candidature déjà envoyée</span>
                 </div>
-              ) : isClosed ? (
-                <button
-                  disabled
-                  className="cursor-not-allowed rounded-2xl bg-[#e3e6ee] px-6 py-3.5 text-xs font-bold text-[#8890a4]"
-                >
-                  Offre clôturée
-                </button>
               ) : (
                 <button
                   onClick={() => onPostuler(selectedJob)}
@@ -514,7 +527,8 @@ export function OffresPubliquesView({
           ) : (
             <div className="space-y-4">
               {filteredOffres.map((offre) => {
-                const hasApplied = candidatureOffreIds.includes(offre.id);
+                const hasApplied = hasCandidateAppliedToJob(offre.id, candidatureOffreIds);
+                const isExpired = isOfferExpired(offre.date_limite) || offre.statut === 'CLOTUREE';
 
                 return (
                   <div
@@ -532,12 +546,26 @@ export function OffresPubliquesView({
                           </span>
                           <span className="text-xs text-[#8790a6]">· {offre.lieu}</span>
                           {offre.date_publication && (
-                            <span className="text-[11px] text-[#9aa3b7]">
-                              · {formatFrenchDate(offre.date_publication)}
+                            <span className="flex items-center gap-1 text-[11px] text-[#717a90]">
+                              <Calendar size={12} className="text-[#594be0]" />
+                              Publiée le {formatFrenchDate(offre.date_publication)}
+                            </span>
+                          )}
+                          {offre.date_limite && (
+                            <span className={`flex items-center gap-1 text-[11px] ${
+                              isExpired ? 'font-bold text-[#dc2626]' : 'text-[#717a90]'
+                            }`}>
+                              <Clock size={12} className={isExpired ? 'text-[#dc2626]' : 'text-[#594be0]'} />
+                              Date limite : {formatFrenchDate(offre.date_limite)}
+                            </span>
+                          )}
+                          {isExpired && (
+                            <span className="rounded-full bg-[#fef2f2] border border-[#fecaca] px-2 py-0.5 text-[10px] font-extrabold text-[#dc2626]">
+                              Candidatures closes
                             </span>
                           )}
                           {hasApplied && (
-                            <span className="rounded-full bg-[#e8f7ee] px-2 py-0.5 text-[10px] font-extrabold text-[#2a955e]">
+                            <span className="rounded-full bg-[#e8f7ee] border border-[#a7f3d0] px-2 py-0.5 text-[10px] font-extrabold text-[#2a955e]">
                               ✓ Déjà postulé
                             </span>
                           )}
@@ -600,12 +628,36 @@ export function OffresPubliquesView({
                           )}
                         </div>
 
-                        <button
-                          onClick={() => setSelectedJob(offre)}
-                          className="rounded-xl bg-[#594be0] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#483ad3] transition"
-                        >
-                          Voir l'offre
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setSelectedJob(offre)}
+                            className="rounded-xl border border-[#e2e5ee] bg-white px-3.5 py-2 text-xs font-bold text-[#374151] hover:bg-[#f6f7fb] transition"
+                          >
+                            Détails
+                          </button>
+                          {isExpired ? (
+                            <span
+                              title="La date limite de candidature est dépassée"
+                              className="inline-flex items-center gap-1 rounded-xl bg-[#fef2f2] px-3 py-2 text-xs font-bold text-[#b91c1c] border border-[#fecaca]"
+                            >
+                              <Clock size={12} /> Clôturée
+                            </span>
+                          ) : hasApplied ? (
+                            <span
+                              title="Vous avez déjà postulé à cette offre"
+                              className="inline-flex items-center gap-1 rounded-xl bg-[#ecfdf5] px-3 py-2 text-xs font-bold text-[#059669] border border-[#a7f3d0]"
+                            >
+                              <CheckCircle2 size={12} /> Déjà postulé
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => onPostuler(offre)}
+                              className="rounded-xl bg-[#594be0] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#483ad3] transition"
+                            >
+                              Postuler
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

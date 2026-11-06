@@ -54,15 +54,14 @@ export function AuthModal({
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
-  // --- Inscription ---
-  const [regRole, setRegRole] = useState<'CANDIDAT' | 'RECRUTEUR'>('CANDIDAT');
+  // --- Inscription (Exclusivement dédiée aux Candidats - Tous les champs vides par défaut) ---
+  const regRole = 'CANDIDAT';
   const [regNom, setRegNom] = useState('');
   const [regPrenom, setRegPrenom] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regTelephone, setRegTelephone] = useState('');
-  const [regVille, setRegVille] = useState('Tunis');
+  const [regVille, setRegVille] = useState('');
   const [regTitre, setRegTitre] = useState('');
-  const [regEntrepriseNom, setRegEntrepriseNom] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
@@ -173,11 +172,6 @@ export function AuthModal({
       return;
     }
 
-    if (regRole === 'RECRUTEUR' && !regEntrepriseNom.trim()) {
-      setError('Veuillez indiquer le nom de votre entreprise ou organisation.');
-      return;
-    }
-
     if (!acceptRgpd) {
       setError('Vous devez accepter le traitement de vos données conformément à la politique RGPD.');
       return;
@@ -186,15 +180,14 @@ export function AuthModal({
     setIsSubmitting(true);
 
     try {
-      // Appel API Laravel avec hachage bcrypt et insertion BDD
+      // Appel API Laravel avec hachage bcrypt et insertion BDD (Rôle CANDIDAT)
       const res = await api.register({
         nom: regNom.trim(),
         prenom: regPrenom.trim(),
         email: regEmail.trim(),
         password: regPassword,
-        role: regRole,
-        entreprise_nom: regRole === 'RECRUTEUR' ? regEntrepriseNom.trim() : undefined,
-        titre: regRole === 'CANDIDAT' ? regTitre.trim() || 'Candidat' : undefined,
+        role: 'CANDIDAT',
+        titre: regTitre.trim() || 'Candidat',
         telephone: regTelephone.trim() || undefined,
         ville: regVille.trim() || 'Tunis',
         rgpd: acceptRgpd,
@@ -203,12 +196,12 @@ export function AuthModal({
       if (res.success && res.data?.user) {
         const createdUser = res.data.user;
         setSuccessMsg(
-          `Compte ${regRole === 'RECRUTEUR' ? 'Recruteur' : 'Candidat'} créé avec succès dans la base de données ! Connexion en cours...`
+          'Votre compte Candidat a été créé avec succès ! Connexion automatique en cours...'
         );
 
         // Connexion immédiate avec les identifiants créés
         setTimeout(async () => {
-          await onLoginSuccess(createdUser, regRole, {
+          await onLoginSuccess(createdUser, 'CANDIDAT', {
             email: regEmail.trim(),
             password: regPassword,
           });
@@ -260,16 +253,12 @@ export function AuthModal({
           <h2 className="mt-3 text-xl font-black text-[#171f33]">
             {tab === 'login'
               ? 'Connexion à Talenta'
-              : regRole === 'CANDIDAT'
-              ? 'Créer mon compte Candidat'
-              : 'Créer mon compte Recruteur'}
+              : 'Créer mon compte Candidat'}
           </h2>
           <p className="mt-1 text-xs text-[#80899f]">
             {tab === 'login'
               ? 'Accédez à votre espace sécurisé selon votre profil.'
-              : regRole === 'CANDIDAT'
-              ? 'Trouvez les meilleures opportunités et postulez en quelques clics.'
-              : 'Publiez vos offres, gérez vos candidatures et recrutez les meilleurs talents.'}
+              : 'Créez votre profil candidat gratuit pour trouver des opportunités et postuler en quelques clics.'}
           </p>
         </div>
 
@@ -461,43 +450,40 @@ export function AuthModal({
           /* ONGLET 2 : FORMULAIRE D'INSCRIPTION DYNAMIQUE & MYSQL            */
           /* ══════════════════════════════════════════════════════════════════ */
           <form onSubmit={handleRegister} className="mt-5 space-y-4">
-            {/* 1. Sélection du profil (Candidat vs Recruteur) */}
-            <div>
-              <label className="text-xs font-bold text-[#232b3e]">
-                Vous êtes : <span className="text-[#cf3b3b]">*</span>
-              </label>
-              <div className="mt-1.5 grid grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setRegRole('CANDIDAT')}
-                  className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border p-3 text-center transition ${
-                    regRole === 'CANDIDAT'
-                      ? 'border-[#594be0] bg-[#f5f4ff] text-[#594be0] shadow-sm'
-                      : 'border-[#e4e7ee] bg-[#fafbfc] text-[#6b758b] hover:border-[#ccd1dc]'
-                  }`}
-                >
-                  <User size={20} className={regRole === 'CANDIDAT' ? 'text-[#594be0]' : 'text-[#8b95a5]'} />
-                  <span className="text-xs font-black">Candidat</span>
-                  <span className="text-[10px] text-[#80899f] leading-tight">
-                    Étudiant, diplômé, chercheur d'emploi
-                  </span>
-                </button>
+            {/* 1. Espace Candidat Exclusif & Information Recruteurs */}
+            <div className="rounded-2xl border border-[#e8e6fb] bg-gradient-to-r from-[#f7f6fe] to-[#faf9fe] p-3.5">
+              <div className="flex items-center gap-3">
+                <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#594be0] text-white shadow-xs">
+                  <User size={19} />
+                </div>
+                <div>
+                  <div className="text-xs font-black text-[#171f33]">Inscription Candidat</div>
+                  <div className="text-[11px] text-[#606982] leading-tight mt-0.5">
+                    Créez votre profil candidat gratuit pour postuler aux offres et déposer vos CV.
+                  </div>
+                </div>
+              </div>
+            </div>
 
+            {/* Note informative pour les recruteurs */}
+            <div className="rounded-2xl border border-[#e5e8f2] bg-[#f9fafc] p-3 text-xs text-[#525b73] flex items-start gap-2.5">
+              <Building2 size={16} className="text-[#594be0] shrink-0 mt-0.5" />
+              <div className="leading-relaxed text-[11px]">
+                <span className="font-bold text-[#1a2235]">Vous êtes recruteur ou entreprise ?</span>
+                <br />
+                Les comptes recruteurs sont créés et validés par l'administrateur. Si vous disposez déjà d'identifiants fournis par l'admin,{' '}
                 <button
                   type="button"
-                  onClick={() => setRegRole('RECRUTEUR')}
-                  className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border p-3 text-center transition ${
-                    regRole === 'RECRUTEUR'
-                      ? 'border-[#594be0] bg-[#f5f4ff] text-[#594be0] shadow-sm'
-                      : 'border-[#e4e7ee] bg-[#fafbfc] text-[#6b758b] hover:border-[#ccd1dc]'
-                  }`}
+                  onClick={() => {
+                    setTab('login');
+                    setError('');
+                    setSuccessMsg('');
+                    try { window.history.replaceState(null, '', '#login'); } catch {}
+                  }}
+                  className="font-bold text-[#594be0] underline hover:text-[#4234c8]"
                 >
-                  <Building2 size={20} className={regRole === 'RECRUTEUR' ? 'text-[#594be0]' : 'text-[#8b95a5]'} />
-                  <span className="text-xs font-black">Recruteur</span>
-                  <span className="text-[10px] text-[#80899f] leading-tight">
-                    Entreprise, startup, cabinet RH
-                  </span>
-                </button>
+                  connectez-vous ici
+                </button>.
               </div>
             </div>
 
@@ -540,7 +526,7 @@ export function AuthModal({
                 <input
                   type="email"
                   required
-                  placeholder="votre.email@domaine.com"
+                  placeholder="amina.bensalem@email.example"
                   value={regEmail ?? ''}
                   onChange={(e) => setRegEmail(e.target.value)}
                   className="w-full bg-transparent outline-none"
@@ -549,41 +535,22 @@ export function AuthModal({
               </div>
             </div>
 
-            {/* 3. Champs spécifiques selon le profil */}
-            {regRole === 'CANDIDAT' ? (
-              <div>
-                <label className="text-xs font-bold text-[#232b3e]">
-                  Titre professionnel souhaité
-                </label>
-                <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-[#e1e4ee] bg-[#fafbfc] px-3.5 py-2.5 text-xs text-[#1e2538] focus-within:border-[#6355e8] focus-within:bg-white transition">
-                  <Briefcase size={16} className="text-[#9fa7bc] shrink-0" />
-                  <input
-                    type="text"
-                    placeholder="Ex: Développeuse Full Stack, Data Scientist..."
-                    value={regTitre ?? ''}
-                    onChange={(e) => setRegTitre(e.target.value)}
-                    className="w-full bg-transparent outline-none"
-                  />
-                </div>
+            {/* 3. Titre professionnel souhaité */}
+            <div>
+              <label className="text-xs font-bold text-[#232b3e]">
+                Titre professionnel souhaité
+              </label>
+              <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-[#e1e4ee] bg-[#fafbfc] px-3.5 py-2.5 text-xs text-[#1e2538] focus-within:border-[#6355e8] focus-within:bg-white transition">
+                <Briefcase size={16} className="text-[#9fa7bc] shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Ex: Développeuse Full Stack, Ingénieur IA..."
+                  value={regTitre ?? ''}
+                  onChange={(e) => setRegTitre(e.target.value)}
+                  className="w-full bg-transparent outline-none"
+                />
               </div>
-            ) : (
-              <div>
-                <label className="text-xs font-bold text-[#232b3e]">
-                  Nom de l'entreprise <span className="text-[#cf3b3b]">*</span>
-                </label>
-                <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-[#e1e4ee] bg-[#fafbfc] px-3.5 py-2.5 text-xs text-[#1e2538] focus-within:border-[#6355e8] focus-within:bg-white transition">
-                  <Building2 size={16} className="text-[#9fa7bc] shrink-0" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: TechNova Solutions, Alpha Corp..."
-                    value={regEntrepriseNom ?? ''}
-                    onChange={(e) => setRegEntrepriseNom(e.target.value)}
-                    className="w-full bg-transparent outline-none"
-                  />
-                </div>
-              </div>
-            )}
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -721,7 +688,7 @@ export function AuthModal({
                   Enregistrement dans la base de données...
                 </>
               ) : (
-                `Créer mon compte ${regRole === 'RECRUTEUR' ? 'Recruteur' : 'Candidat'}`
+                'Créer mon compte Candidat'
               )}
             </button>
 

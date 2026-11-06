@@ -17,7 +17,15 @@ import {
   ChevronRight,
   ShieldCheck,
 } from 'lucide-react';
-import { AnalyseCv, Candidat, CV, Offre, User as UserType } from '@/lib/types';
+import {
+  AnalyseCv,
+  Candidat,
+  CV,
+  formatFrenchDate,
+  isOfferExpired,
+  Offre,
+  User as UserType,
+} from '@/lib/types';
 
 interface PostulerModalProps {
   isOpen: boolean;
@@ -84,9 +92,16 @@ export function PostulerModal({
 
   if (!isOpen || !offre) return null;
 
+  const isExpired = isOfferExpired(offre.date_limite) || offre.statut === 'CLOTUREE';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (isExpired) {
+      setError(`La date limite de candidature (${formatFrenchDate(offre.date_limite)}) est dépassée. Les nouvelles candidatures sont closes.`);
+      return;
+    }
 
     if (hasAlreadyApplied) {
       setError('Vous avez déjà postulé à cette offre. Une seconde candidature n\'est pas autorisée.');
@@ -218,14 +233,61 @@ export function PostulerModal({
               <h2 className="mt-2 text-xl font-black text-[#161e31]">
                 Postuler : {offre.titre}
               </h2>
-              <p className="text-xs text-[#7f889e]">
-                {offre.entreprise?.nom} · {offre.lieu} · {offre.type_contrat}
-              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#7f889e]">
+                <span className="font-semibold text-[#594be0]">{offre.entreprise?.nom}</span>
+                <span>•</span>
+                <span>{offre.lieu}</span>
+                <span>•</span>
+                <span className="font-medium text-[#171f33]">{offre.type_contrat}</span>
+                {offre.date_publication && (
+                  <>
+                    <span>•</span>
+                    <span>Publiée le {formatFrenchDate(offre.date_publication)}</span>
+                  </>
+                )}
+                {offre.date_limite && (
+                  <>
+                    <span>•</span>
+                    <span className={isExpired ? 'font-bold text-[#dc2626]' : 'font-medium text-[#171f33]'}>
+                      Date limite : {formatFrenchDate(offre.date_limite)}
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
 
-            {hasAlreadyApplied && (
-              <div className="mt-4 rounded-xl border border-[#ffd2d2] bg-[#fff5f5] p-3 text-xs font-bold text-[#cf3b3b]">
-                Vous avez déjà postulé à cette offre. Une seconde candidature n'est pas autorisée.
+            {isExpired && (
+              <div className="mt-4 rounded-2xl border border-[#fecaca] bg-[#fef2f2] p-4 text-xs text-[#991b1b] space-y-1">
+                <div className="font-extrabold flex items-center gap-1.5 text-sm">
+                  <AlertCircle size={16} />
+                  <span>Candidatures clôturées</span>
+                </div>
+                <p>
+                  La date limite de dépôt fixée par l'entreprise était le <strong>{formatFrenchDate(offre.date_limite)}</strong>. Les nouvelles candidatures sont closes pour cette offre.
+                </p>
+              </div>
+            )}
+
+            {hasAlreadyApplied && !isExpired && (
+              <div className="mt-4 rounded-2xl border border-[#bbf7d0] bg-[#f0fdf4] p-4 text-xs text-[#166534] space-y-2">
+                <div className="font-extrabold flex items-center gap-1.5 text-sm">
+                  <CheckCircle2 size={16} />
+                  <span>Candidature déjà transmise</span>
+                </div>
+                <p>
+                  Vous avez déjà envoyé votre candidature pour ce poste. Le système interdit à un candidat de postuler deux fois à la même offre.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onGoToMyApplications();
+                  }}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-[#15803d] underline hover:text-[#14532d]"
+                >
+                  <span>Voir le suivi de ma candidature dans « Mes Candidatures »</span>
+                  <ChevronRight size={13} />
+                </button>
               </div>
             )}
 
@@ -433,10 +495,14 @@ export function PostulerModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={hasAlreadyApplied || submitting}
+                  disabled={hasAlreadyApplied || isExpired || submitting}
                   className="rounded-xl bg-[#594be0] px-6 py-2.5 text-xs font-bold text-white shadow-md hover:bg-[#483ad3] disabled:opacity-50 transition"
                 >
-                  {submitting
+                  {isExpired
+                    ? 'Candidatures closes'
+                    : hasAlreadyApplied
+                    ? 'Candidature déjà envoyée'
+                    : submitting
                     ? 'Traitement en cours...'
                     : sourceType === 'DYNAMIQUE'
                     ? 'Postuler avec mon CV dynamique'

@@ -42,6 +42,9 @@ import {
   User,
   JOB_ALIAS_MAP,
   isJobFavorited,
+  isOfferExpired,
+  hasCandidateAppliedToJob,
+  formatFrenchDate,
 } from '@/lib/types';
 import {
   INITIAL_CANDIDATS,
@@ -597,23 +600,33 @@ export default function AppRoot() {
   };
 
   // Gestion de l'envoi de messages
-  const handleSendMessage = (conversationId: string, contenu: string) => {
+  const handleSendMessage = (
+    conversationId: string,
+    contenu: string,
+    overrideSenderRole?: RoleName,
+    overrideSenderName?: string
+  ) => {
     const conv = conversations.find((c) => c.id === conversationId);
     if (!conv) return;
 
-    const isCandidat = currentRole === 'CANDIDAT';
-    const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    const actualRole = overrideSenderRole || currentRole;
+    const isCandidat = actualRole === 'CANDIDAT';
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const nowStr = `${now.toISOString().replace('T', ' ').substring(0, 10)} ${timeStr}`;
 
     const newMsg: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       conversation_id: conversationId,
-      sender_id: currentUser?.id || (isCandidat ? conv.candidat_id : conv.recruteur_id),
-      sender_role: currentRole,
-      sender_name: currentUser
-        ? `${currentUser.prenom} ${currentUser.nom}`
-        : isCandidat
-        ? conv.candidat_nom
-        : conv.recruteur_nom,
+      sender_id: isCandidat ? conv.candidat_id : conv.recruteur_id,
+      sender_role: actualRole,
+      sender_name:
+        overrideSenderName ||
+        (currentUser
+          ? `${currentUser.prenom} ${currentUser.nom}`
+          : isCandidat
+          ? conv.candidat_nom
+          : conv.recruteur_nom),
       receiver_id: isCandidat ? conv.recruteur_id : conv.candidat_id,
       receiver_name: isCandidat ? conv.recruteur_nom : conv.candidat_nom,
       contenu,
@@ -643,7 +656,17 @@ export default function AppRoot() {
   const handleSelectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId);
     setConversations((prev) => {
-      const updated = prev.map((c) => {
+      const target = prev.find((c) => c.id === conversationId);
+      if (!target) return prev;
+
+      const hasUnread =
+        (currentRole === 'CANDIDAT' && (target.non_lus_candidat || 0) > 0) ||
+        (currentRole === 'RECRUTEUR' && (target.non_lus_recruteur || 0) > 0);
+
+      // Si déjà marqué comme lu, ne pas recréer d'état pour éviter les boucles de rendu
+      if (!hasUnread) return prev;
+
+      return prev.map((c) => {
         if (c.id === conversationId) {
           return {
             ...c,
@@ -653,7 +676,6 @@ export default function AppRoot() {
         }
         return c;
       });
-      return updated;
     });
   };
 
@@ -822,6 +844,20 @@ export default function AppRoot() {
     let analysisData: import('@/lib/types').AnalyseCv;
 
     const targetOffre = offres.find((o) => o.id === offreId);
+
+    // Vérification RM2 : Interdiction de double candidature pour le même candidat
+    if (hasCandidateAppliedToJob(offreId, candidateApplicationOfferIds)) {
+      return {
+        error: "Vous avez déjà postulé à cette offre d'emploi. Une seconde candidature n'est pas autorisée.",
+      };
+    }
+
+    // Vérification RM1 : Interdiction de postuler si la date limite est dépassée
+    if (targetOffre && (isOfferExpired(targetOffre.date_limite) || targetOffre.statut === 'CLOTUREE')) {
+      return {
+        error: `La date limite de candidature (${formatFrenchDate(targetOffre.date_limite)}) est dépassée. Les nouvelles candidatures sont closes pour cette offre.`,
+      };
+    }
 
     // Compétences requises par l'offre pour le calcul IA
     const reqSkills = targetOffre?.competences_requises || ['React', 'Node.js', 'SQL'];
@@ -1873,6 +1909,7 @@ export default function AppRoot() {
               selectedConversationId={selectedConversationId}
               onSelectConversation={handleSelectConversation}
               onNavigateScreen={handleNavigate}
+              offres={offres}
             />
           )}
 
@@ -2034,7 +2071,7 @@ export default function AppRoot() {
         candidat={candidatProfile}
         hasAlreadyApplied={
           postulerOffreTarget
-            ? candidateApplicationOfferIds.includes(postulerOffreTarget.id)
+            ? hasCandidateAppliedToJob(postulerOffreTarget.id, candidateApplicationOfferIds)
             : false
         }
         onApplicationSubmit={handleApplicationSubmit}

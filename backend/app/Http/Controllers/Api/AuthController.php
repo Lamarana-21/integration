@@ -25,7 +25,8 @@ class AuthController extends Controller
     }
 
     /**
-     * Module 3.1 : Inscription d'un utilisateur (Candidat ou Recruteur)
+     * Module 3.1 : Inscription publique (exclusivement réservée aux Candidats)
+     * Règle métier : Les comptes Recruteurs et Administrateurs sont créés par l'Administrateur
      */
     public function register(Request $request): JsonResponse
     {
@@ -34,39 +35,25 @@ class AuthController extends Controller
             'prenom' => 'required|string|max:100',
             'email' => 'required|string|email|max:150|unique:users,email',
             'password' => 'required|string|min:8',
-            'role' => 'nullable|string|in:CANDIDAT,RECRUTEUR,ADMIN',
-            'entreprise_nom' => 'nullable|string|max:150',
-            'entreprise_id' => 'nullable|string',
+            'role' => 'nullable|string',
             'titre' => 'nullable|string|max:150',
             'telephone' => 'nullable|string|max:50',
             'ville' => 'nullable|string|max:100',
         ]);
 
-        $roleName = strtoupper($request->input('role', 'CANDIDAT'));
-        $role = Role::firstOrCreate(
-            ['nom' => $roleName],
-            ['description' => "Rôle {$roleName} sur la plateforme Talenta"]
-        );
-
-        $entrepriseId = $request->input('entreprise_id');
-        if ($roleName === 'RECRUTEUR') {
-            if (!$entrepriseId && $request->filled('entreprise_nom')) {
-                $ent = Entreprise::firstOrCreate(
-                    ['nom' => trim($request->input('entreprise_nom'))],
-                    [
-                        'secteur' => 'Technologies & Services',
-                        'ville' => $request->input('ville', 'Tunis'),
-                        'pays' => 'Tunisie',
-                        'statut' => 'ACTIVE',
-                    ]
-                );
-                $entrepriseId = $ent->id;
-            } elseif (!$entrepriseId) {
-                // Associer par défaut à la première entreprise si aucune fournie
-                $firstEnt = Entreprise::first();
-                $entrepriseId = $firstEnt?->id;
-            }
+        // Vérification stricte : Seuls les candidats peuvent s'inscrire publiquement
+        if ($request->filled('role') && strtoupper($request->input('role')) !== 'CANDIDAT') {
+            return response()->json([
+                'success' => false,
+                'message' => 'L\'inscription directe est exclusivement réservée aux candidats. Les comptes recruteurs sont créés par l\'administrateur.',
+            ], 403);
         }
+
+        $roleName = 'CANDIDAT';
+        $role = Role::firstOrCreate(
+            ['nom' => 'CANDIDAT'],
+            ['description' => 'Candidat postulant aux offres et gérant ses CV']
+        );
 
         $user = User::create([
             'nom' => $validated['nom'],
@@ -74,7 +61,7 @@ class AuthController extends Controller
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'role_id' => $role->id,
-            'entreprise_id' => $entrepriseId,
+            'entreprise_id' => null,
             'statut' => 'ACTIF',
             'derniere_connexion' => Carbon::now(),
         ]);

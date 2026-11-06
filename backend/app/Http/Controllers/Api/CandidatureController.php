@@ -94,16 +94,31 @@ class CandidatureController extends Controller
 
         $offre = Offre::findOrFail($offreId);
 
-        // RM2 Check : Double candidature interdite
+        // RM1 Check : Date limite dépassée ou offre non publiée
+        if ($offre->statut !== 'PUBLIEE') {
+            return response()->json([
+                'message' => 'Cette offre n\'est plus disponible (statut: ' . $offre->statut . ').',
+            ], 422);
+        }
+
+        if ($offre->date_limite && Carbon::parse($offre->date_limite)->endOfDay()->isPast()) {
+            return response()->json([
+                'message' => 'La date limite pour postuler à cette offre est dépassée (' . Carbon::parse($offre->date_limite)->format('d/m/Y') . '). Les candidatures sont closes.',
+                'expired' => true,
+            ], 422);
+        }
+
+        // RM2 Check : Double candidature interdite pour le même candidat
         $alreadyApplied = Candidature::where('candidat_id', $candidat->id)
             ->where('offre_id', $offre->id)
             ->first();
 
         if ($alreadyApplied) {
             return response()->json([
-                'message' => 'Vous avez déjà postulé à cette offre.',
+                'message' => 'Vous avez déjà postulé à cette offre. Une seconde candidature n\'est pas autorisée.',
+                'already_applied' => true,
                 'candidature' => $alreadyApplied->load(['offre.entreprise', 'candidat.user', 'cv', 'analyse']),
-            ], 200);
+            ], 422);
         }
 
         $cvId = $request->input('cv_id');

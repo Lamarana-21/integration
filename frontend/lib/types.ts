@@ -244,3 +244,34 @@ export function isJobFavorited(jobId?: string | null, favIds: string[] = []): bo
   return favIds.some((f) => aliases.includes(String(f).trim().toLowerCase()));
 }
 
+export function isOfferExpired(dateLimite?: string | null): boolean {
+  if (!dateLimite) return false;
+  try {
+    const clean = dateLimite.includes('T') ? dateLimite.split('T')[0] : dateLimite;
+    const deadline = new Date(`${clean}T23:59:59`);
+    if (isNaN(deadline.getTime())) return false;
+    const now = new Date();
+    return now.getTime() > deadline.getTime();
+  } catch {
+    return false;
+  }
+}
+
+export function hasCandidateAppliedToJob(jobId?: string | null, appliedJobIds: string[] = []): boolean {
+  if (!jobId || !Array.isArray(appliedJobIds) || appliedJobIds.length === 0) return false;
+  const cleanTarget = String(jobId).trim().toLowerCase();
+  const aliases = [cleanTarget, ...(JOB_ALIAS_MAP[cleanTarget] || []).map((a) => a.toLowerCase())];
+  return appliedJobIds.some((id) => aliases.includes(String(id).trim().toLowerCase()));
+}
+
+export function formatFrenchDate(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  const clean = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+  const parts = clean.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+}
+
+
