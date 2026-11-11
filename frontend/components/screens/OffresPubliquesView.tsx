@@ -71,11 +71,18 @@ export function OffresPubliquesView({
   }, [initialSelectedOffre]);
 
   const publishedOffres = useMemo(() => {
-    return offres.filter((o) => o.statut === 'PUBLIEE' && !isOfferExpired(o.date_limite));
+    return offres.filter(
+      (o) =>
+        o.statut === 'PUBLIEE' &&
+        !o.supprimee &&
+        !isOfferExpired(o.date_limite)
+    );
   }, [offres]);
 
   const filteredOffres = useMemo(() => {
     const list = offres.filter((offre) => {
+      if (offre.supprimee || offre.statut === 'ARCHIVEE') return false;
+
       if (currentRole === 'VISITEUR' || currentRole === 'CANDIDAT') {
         if (offre.statut !== 'PUBLIEE') return false;
       }
@@ -135,6 +142,9 @@ export function OffresPubliquesView({
   // DÉTAILS D'UNE OFFRE (E3) — PROPRE, STRUCTURÉ ET PROFESSIONNEL
   // ============================================================================
   if (selectedJob) {
+    const isDeleted = Boolean(
+      selectedJob.supprimee || selectedJob.statut === 'ARCHIVEE'
+    );
     const hasApplied = hasCandidateAppliedToJob(selectedJob.id, candidatureOffreIds);
     const isClosed = selectedJob.statut === 'CLOTUREE' || isOfferExpired(selectedJob.date_limite);
     const isFav = isJobFavorited(selectedJob.id, favorisOffresIds);
@@ -143,10 +153,27 @@ export function OffresPubliquesView({
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 space-y-6">
         <button
           onClick={closeJobDetail}
-          className="inline-flex items-center gap-2 text-xs font-bold text-[#594be0] hover:underline"
+          className="inline-flex items-center gap-2 text-xs font-bold text-[#594be0] hover:underline cursor-pointer"
         >
           <ChevronLeft size={16} /> Retour aux offres
         </button>
+
+        {/* ALERTE MAJEURE SI OFFRE SUPPRIMÉE PAR L'ENTREPRISE */}
+        {isDeleted && (
+          <div className="rounded-2xl border-2 border-[#ef4444] bg-[#fef2f2] p-5 text-[#991b1b] shadow-md">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <h2 className="text-base font-black tracking-wide uppercase text-[#b91c1c]">
+                  Cette offre d'emploi a été supprimée par l'entreprise
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-[#7f1d1d]">
+                  Le recruteur a retiré cette annonce du recrutement. Si vous aviez déjà postulé, votre candidature reste archivée dans votre tableau de suivi mais aucun nouveau dépôt n'est possible.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* En-tête de l'offre */}
         <div className="rounded-3xl border border-[#e7eaf2] bg-white p-6 sm:p-8 shadow-xs">
@@ -163,12 +190,14 @@ export function OffresPubliquesView({
                   </span>
                   <span
                     className={`rounded-md px-2.5 py-0.5 text-xs font-bold ${
-                      isClosed
+                      isDeleted
+                        ? 'bg-[#fef2f2] text-[#dc2626] border border-[#fecaca]'
+                        : isClosed
                         ? 'bg-[#fef2f2] text-[#dc2626] border border-[#fecaca]'
                         : 'bg-[#eef8f2] text-[#2d9a62]'
                     }`}
                   >
-                    {isClosed ? 'CLÔTURÉE' : 'ACTIVE'}
+                    {isDeleted ? 'SUPPRIMÉE' : isClosed ? 'CLÔTURÉE' : 'ACTIVE'}
                   </span>
                   {selectedJob.salaire && (
                     <span className="rounded-md bg-[#f8f9fc] border border-[#e5e8f0] px-2.5 py-0.5 text-xs font-bold text-[#171f33]">
@@ -205,12 +234,15 @@ export function OffresPubliquesView({
                   {selectedJob.date_limite && (
                     <span
                       className={`flex items-center gap-1 ${
-                        isClosed ? 'text-[#dc2626] font-bold' : ''
+                        isClosed || isDeleted ? 'text-[#dc2626] font-bold' : ''
                       }`}
                     >
-                      <Clock size={14} className={isClosed ? 'text-[#dc2626]' : 'text-[#594be0]'} />{' '}
+                      <Clock
+                        size={14}
+                        className={isClosed || isDeleted ? 'text-[#dc2626]' : 'text-[#594be0]'}
+                      />{' '}
                       Date limite :{' '}
-                      <strong className={isClosed ? 'text-[#dc2626]' : 'text-[#171f33]'}>
+                      <strong className={isClosed || isDeleted ? 'text-[#dc2626]' : 'text-[#171f33]'}>
                         {formatFrenchDate(selectedJob.date_limite)}
                       </strong>
                     </span>
@@ -225,7 +257,7 @@ export function OffresPubliquesView({
                 <button
                   type="button"
                   onClick={() => onToggleFavori(selectedJob.id)}
-                  className={`grid size-11 place-items-center rounded-2xl border transition ${
+                  className={`grid size-11 place-items-center rounded-2xl border transition cursor-pointer ${
                     isFav
                       ? 'border-[#fecdd3] bg-[#fff1f2] text-[#e11d48]'
                       : 'border-[#e2e5ef] bg-white text-[#788299] hover:text-[#e11d48] hover:bg-[#fff1f2]'
@@ -239,14 +271,18 @@ export function OffresPubliquesView({
                 <button
                   type="button"
                   onClick={() => onContactRecruiter(selectedJob)}
-                  className="flex items-center gap-2 rounded-2xl border border-[#d8d4fa] bg-[#faf9fe] px-4 py-3 text-xs font-bold text-[#5547d7] hover:bg-[#f1edfe] transition"
+                  className="flex items-center gap-2 rounded-2xl border border-[#d8d4fa] bg-[#faf9fe] px-4 py-3 text-xs font-bold text-[#5547d7] hover:bg-[#f1edfe] transition cursor-pointer"
                 >
                   <MessageSquare size={15} />
                   <span>Contacter l'entreprise</span>
                 </button>
               )}
 
-              {currentRole === 'VISITEUR' ? (
+              {isDeleted ? (
+                <div className="flex items-center gap-2 rounded-2xl bg-[#fef2f2] px-4 py-3 text-xs font-bold text-[#991b1b] border border-[#fecaca]">
+                  <span>Offre supprimée</span>
+                </div>
+              ) : currentRole === 'VISITEUR' ? (
                 isClosed ? (
                   <button
                     disabled
@@ -257,7 +293,7 @@ export function OffresPubliquesView({
                 ) : (
                   <button
                     onClick={() => onPostuler(selectedJob)}
-                    className="rounded-2xl bg-[#594be0] px-6 py-3 text-xs font-bold text-white shadow-sm hover:bg-[#483ad3]"
+                    className="rounded-2xl bg-[#594be0] px-6 py-3 text-xs font-bold text-white shadow-sm hover:bg-[#483ad3] cursor-pointer"
                   >
                     Se connecter pour postuler
                   </button>
@@ -275,7 +311,7 @@ export function OffresPubliquesView({
               ) : (
                 <button
                   onClick={() => onPostuler(selectedJob)}
-                  className="rounded-2xl bg-[#594be0] px-6 py-3 text-xs font-extrabold text-white shadow-sm hover:bg-[#4739d2] transition"
+                  className="rounded-2xl bg-[#594be0] px-6 py-3 text-xs font-extrabold text-white shadow-sm hover:bg-[#4739d2] transition cursor-pointer"
                 >
                   Postuler à cette offre
                 </button>
@@ -284,8 +320,8 @@ export function OffresPubliquesView({
           </div>
         </div>
 
-        {/* Contenu principal en 2 colonnes */}
-        <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
+        {/* Contenu principal en 2 colonnes bien aligné */}
+        <div className="grid gap-6 md:grid-cols-[2fr_1fr] items-start">
           <div className="space-y-6">
             <section className="rounded-3xl border border-[#e7eaf2] bg-white p-6 sm:p-7 shadow-xs">
               <h2 className="text-base font-extrabold text-[#192033]">
@@ -344,9 +380,11 @@ export function OffresPubliquesView({
                 </div>
               </div>
 
-              <p className="mt-4 text-xs leading-5 text-[#5e667c]">
-                {selectedJob.entreprise?.description}
-              </p>
+              {selectedJob.entreprise?.description && (
+                <p className="mt-4 text-xs leading-5 text-[#5e667c]">
+                  {selectedJob.entreprise.description}
+                </p>
+              )}
 
               <div className="mt-4 border-t border-[#f0f2f7] pt-4 text-xs space-y-2">
                 <div>

@@ -330,6 +330,11 @@ export function MesCandidaturesView({
             const hasInterview =
               selectedCandidature.statut === 'ENTRETIEN' ||
               Boolean(selectedCandidature.date_entretien);
+            const isOfferDeleted = Boolean(
+              selectedCandidature.offre_supprimee ||
+              selectedCandidature.offre?.supprimee ||
+              selectedCandidature.offre?.statut === 'ARCHIVEE'
+            );
 
             const steps = [
               { key: 'RECUE', label: '1. Reçue' },
@@ -348,6 +353,23 @@ export function MesCandidaturesView({
 
             return (
               <div className="rounded-3xl border border-[#e4e7f2] bg-white p-6 sm:p-7 shadow-xs">
+                {/* ALERTE OFFRE SUPPRIMÉE PAR L'ENTREPRISE MENTIONNÉE EN GRAND */}
+                {isOfferDeleted && (
+                  <div className="mb-6 rounded-2xl border-2 border-[#ef4444] bg-[#fef2f2] p-4 text-[#991b1b] shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">⚠️</span>
+                      <div>
+                        <div className="text-sm font-black uppercase tracking-wide text-[#b91c1c]">
+                          Cette offre d'emploi a été supprimée par l'entreprise
+                        </div>
+                        <div className="text-xs text-[#7f1d1d] mt-0.5">
+                          L'entreprise a retiré cette annonce. Votre historique de candidature ci-dessous reste conservé pour votre suivi personnel.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex flex-col justify-between gap-4 border-b border-[#f0f2f7] pb-5 sm:flex-row sm:items-center">
                   <div>
                     <div className="text-xs font-bold text-[#8c95aa] uppercase tracking-wider">

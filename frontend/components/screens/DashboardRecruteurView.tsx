@@ -56,17 +56,10 @@ export function DashboardRecruteurView({
     return list.length > 0 ? list : offres;
   }, [offres, currentEntId, currentUser]);
 
-  const activeJobs = companyJobs.filter((o: Offre) => o.statut === 'PUBLIEE');
+  const activeJobs = companyJobs.filter((o: Offre) => o.statut === 'PUBLIEE' && !o.supprimee);
 
   const pendingApps = candidatures.filter((c) => c.statut === 'RECUE');
-  const interviewApps = candidatures.filter((c) => c.statut === 'ENTRETIEN');
-
-  // Notifications spécifiques aux candidatures et offres pour ce recruteur
-  const recruiterAlerts = useMemo(() => {
-    return notifications.filter(
-      (n) => n.type === 'NOUVELLE_CANDIDATURE' || n.utilisateur_id === currentUser?.id
-    );
-  }, [notifications, currentUser]);
+  const interviewApps = candidatures.filter((c) => c.statut === 'ENTRETIEN' || Boolean(c.date_entretien));
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-8">
@@ -80,7 +73,7 @@ export function DashboardRecruteurView({
             Tableau de bord Recruteur
           </h1>
           <p className="mt-1 text-xs text-[#7d869d]">
-            Aperçu synthétique des candidatures, des offres en cours et de l'assistance IA.
+            Aperçu synthétique des statistiques et de l'activité de recrutement de votre entreprise.
           </p>
         </div>
 
@@ -88,7 +81,7 @@ export function DashboardRecruteurView({
           onClick={onOpenNewJob}
           className="flex items-center gap-2 rounded-2xl bg-[#594be0] px-5 py-3 text-xs font-extrabold text-white shadow-md shadow-[#594be0]/20 hover:bg-[#483ad3] transition w-fit"
         >
-          <Plus size={16} /> Nouvelle offre
+          <BriefcaseBusiness size={16} /> Mes offres
         </button>
       </div>
 
@@ -102,7 +95,7 @@ export function DashboardRecruteurView({
             <span className="text-[11px] font-bold text-[#2e9c63]">↗ +2 ce mois</span>
           </div>
           <div className="mt-4 text-3xl font-black text-[#161e31]">
-            {activeJobs.length || 6}
+            {activeJobs.length}
           </div>
           <div className="text-xs font-medium text-[#7d869d]">Offres actives</div>
         </div>
@@ -115,7 +108,7 @@ export function DashboardRecruteurView({
             <span className="text-[11px] font-bold text-[#2e9c63]">↗ +18% vs. M-1</span>
           </div>
           <div className="mt-4 text-3xl font-black text-[#161e31]">
-            {candidatures.length || 48}
+            {candidatures.length}
           </div>
           <div className="text-xs font-medium text-[#7d869d]">Candidatures reçues</div>
         </div>
@@ -130,7 +123,7 @@ export function DashboardRecruteurView({
             </span>
           </div>
           <div className="mt-4 text-3xl font-black text-[#161e31]">
-            {pendingApps.length || 12}
+            {pendingApps.length}
           </div>
           <div className="text-xs font-medium text-[#7d869d]">À traiter (statut Reçue)</div>
         </div>
@@ -140,10 +133,10 @@ export function DashboardRecruteurView({
             <div className="grid size-10 place-items-center rounded-2xl bg-[#ebf9f1]">
               <Calendar size={20} />
             </div>
-            <span className="text-[11px] font-bold text-[#594be0]">4 cette semaine</span>
+            <span className="text-[11px] font-bold text-[#594be0]">Planifiés</span>
           </div>
           <div className="mt-4 text-3xl font-black text-[#161e31]">
-            {interviewApps.length || 4}
+            {interviewApps.length}
           </div>
           <div className="text-xs font-medium text-[#7d869d]">Entretiens prévus</div>
         </div>
@@ -207,7 +200,7 @@ export function DashboardRecruteurView({
               }}
             >
               <div className="grid size-22 place-items-center rounded-full bg-white shadow-xs">
-                <span className="text-2xl font-black text-[#171f33]">48</span>
+                <span className="text-2xl font-black text-[#171f33]">{candidatures.length}</span>
                 <span className="text-[10px] font-bold text-[#9aa3b6] uppercase">Total</span>
               </div>
             </div>
@@ -216,174 +209,33 @@ export function DashboardRecruteurView({
               <div className="flex items-center gap-2">
                 <span className="size-2.5 rounded-full bg-[#594be0]" />
                 <span className="text-[#656e84]">Reçue / Examen</span>
-                <strong className="text-[#192135]">18</strong>
+                <strong className="text-[#192135]">
+                  {candidatures.filter((c) => c.statut === 'RECUE' || c.statut === 'EN_EXAMEN').length}
+                </strong>
               </div>
               <div className="flex items-center gap-2">
                 <span className="size-2.5 rounded-full bg-[#4085e6]" />
                 <span className="text-[#656e84]">Présélectionnée</span>
-                <strong className="text-[#192135]">13</strong>
+                <strong className="text-[#192135]">
+                  {candidatures.filter((c) => c.statut === 'PRESELECTIONNEE').length}
+                </strong>
               </div>
               <div className="flex items-center gap-2">
                 <span className="size-2.5 rounded-full bg-[#f5b041]" />
                 <span className="text-[#656e84]">Entretien</span>
-                <strong className="text-[#192135]">8</strong>
+                <strong className="text-[#192135]">
+                  {candidatures.filter((c) => c.statut === 'ENTRETIEN').length}
+                </strong>
               </div>
               <div className="flex items-center gap-2">
                 <span className="size-2.5 rounded-full bg-[#2ecc71]" />
                 <span className="text-[#656e84]">Acceptée</span>
-                <strong className="text-[#192135]">5</strong>
+                <strong className="text-[#192135]">
+                  {candidatures.filter((c) => c.statut === 'ACCEPTEE').length}
+                </strong>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Candidatures Récentes avec Score IA (E7) */}
-      <div className="mt-8 rounded-3xl border border-[#e8ebf3] bg-white p-6 shadow-xs">
-        <div className="flex items-center justify-between border-b border-[#f0f2f7] pb-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <Sparkles size={16} className="text-[#594be0]" />
-              <h2 className="text-sm font-extrabold text-[#171f33]">
-                Candidatures récentes avec score IA
-              </h2>
-            </div>
-            <p className="text-[11px] text-[#868fa4]">
-              Classement assisté par IA (suggestion d'aide à la décision humaine)
-            </p>
-          </div>
-
-          <button
-            onClick={onViewAllApplications}
-            className="text-xs font-bold text-[#594be0] hover:underline"
-          >
-            Voir toutes les candidatures →
-          </button>
-        </div>
-
-        <div className="mt-4 divide-y divide-[#f2f4f9]">
-          {candidatures.slice(0, 4).map((cand) => (
-            <div
-              key={cand.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3.5 hover:bg-[#fafbfc] px-2 rounded-2xl transition"
-            >
-              <div className="flex items-center gap-3">
-                <div className="grid size-10 place-items-center rounded-2xl bg-[#eeeaff] text-xs font-black text-[#594be0]">
-                  {cand.candidat?.prenom?.[0] || cand.candidat?.user?.prenom?.[0] || 'C'}
-                  {cand.candidat?.nom?.[0] || cand.candidat?.user?.nom?.[0] || ''}
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-[#171f33]">
-                    {cand.candidat?.prenom || cand.candidat?.user?.prenom || 'Candidat'} {cand.candidat?.nom || cand.candidat?.user?.nom || ''} ·{' '}
-                    <span className="text-[#666f86] font-normal">{cand.offre?.titre || offres.find(o => o.id === cand.offre_id)?.titre || 'Offre d\'emploi'}</span>
-                  </div>
-                  <div className="text-[11px] text-[#8790a4]">
-                    Envoyée le {cand.created_at} · Statut : {cand.statut}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                {cand.analyse && (
-                  <div className="flex items-center gap-2 rounded-xl bg-[#f4f2ff] px-3 py-1.5 border border-[#dfdbfd]">
-                    <Sparkles size={14} className="text-[#594be0]" />
-                    <span className="text-xs font-black text-[#594be0]">
-                      Score IA {cand.analyse.score_correspondance}%
-                    </span>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => onOpenApplicationDetail(cand)}
-                  className="rounded-xl bg-[#594be0] px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-[#483ad3]"
-                >
-                  Ouvrir
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Alertes de candidatures reçues en temps réel */}
-      {recruiterAlerts.length > 0 && (
-        <div className="mt-8 rounded-3xl border border-[#e8ebf3] bg-gradient-to-r from-white via-[#fafbfe] to-[#f5f4ff] p-6 shadow-xs">
-          <div className="flex items-center justify-between border-b border-[#f0f2f7] pb-3">
-            <h3 className="text-sm font-extrabold text-[#171f33] flex items-center gap-2">
-              <Bell size={16} className="text-[#594be0]" /> Alertes de candidatures reçues ({recruiterAlerts.length})
-            </h3>
-            <button
-              onClick={onViewAllApplications}
-              className="text-xs font-bold text-[#594be0] hover:underline"
-            >
-              Voir toutes les candidatures →
-            </button>
-          </div>
-          <div className="mt-3 divide-y divide-[#f2f4f9]">
-            {recruiterAlerts.slice(0, 4).map((alert: NotificationRecord) => (
-              <div key={alert.id} className="py-3 flex items-start gap-3">
-                <span className="grid size-8 place-items-center rounded-xl bg-[#ecfdf5] text-[#059669] shrink-0 mt-0.5">
-                  <CheckCircle2 size={16} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-black text-[#1a2235]">{alert.objet}</div>
-                  <div className="text-[11px] text-[#5e677e] mt-0.5 leading-relaxed">{alert.message}</div>
-                </div>
-                <div className="text-[10px] text-[#9ba3b8] font-bold shrink-0">{alert.created_at}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Mes Offres Section */}
-      <div className="mt-8 rounded-3xl border border-[#e8ebf3] bg-white p-6 shadow-xs">
-        <h2 className="text-sm font-extrabold text-[#171f33]">
-          Mes offres d'emploi ({companyJobs.length})
-        </h2>
-        <div className="mt-4 divide-y divide-[#f2f4f9]">
-          {companyJobs.map((job: Offre) => (
-            <div
-              key={job.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3.5"
-            >
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-[#171f33]">{job.titre}</span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                      job.statut === 'PUBLIEE'
-                        ? 'bg-[#e8f7ee] text-[#2a945d]'
-                        : 'bg-[#fff5df] text-[#b87c14]'
-                    }`}
-                  >
-                    {job.statut}
-                  </span>
-                </div>
-                <div className="text-[11px] text-[#868fa4]">
-                  {job.candidatures_count || 0} candidatures reçues · Date limite :{' '}
-                  {job.date_limite || 'Non définie'}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => onEditJob(job)}
-                  className="rounded-lg border border-[#dde1ed] px-3 py-1 text-xs font-bold text-[#4e566c] hover:bg-[#fafbfc]"
-                >
-                  Modifier
-                </button>
-                {job.statut === 'PUBLIEE' && (
-                  <button
-                    onClick={() => onCloseJob(job.id)}
-                    className="rounded-lg border border-[#ffd5d5] px-3 py-1 text-xs font-bold text-[#cf3b3b] hover:bg-[#fff5f5]"
-                  >
-                    Clôturer
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 

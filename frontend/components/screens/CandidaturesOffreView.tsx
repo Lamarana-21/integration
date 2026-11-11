@@ -868,29 +868,26 @@ export function CandidaturesOffreView({
                         </div>
                       </td>
 
-                      {/* CV Déposé */}
+                      {/* CV Déposé avec bouton Voir CV et téléchargement direct */}
                       <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => setQuickViewCand(c)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-2.5 py-1.5 text-xs font-bold text-[#334155] hover:border-[#4f46e5] hover:text-[#4f46e5] transition"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#cbd5e1] bg-white px-2.5 py-1.5 text-xs font-bold text-[#1e293b] hover:border-[#4f46e5] hover:text-[#4f46e5] transition cursor-pointer"
                             title="Aperçu du CV tel que déposé"
                           >
-                            {isDynamic ? (
-                              <FileCheck size={14} className="text-[#4f46e5]" />
-                            ) : (
-                              <FileText size={14} className="text-[#0284c7]" />
-                            )}
-                            <span className="max-w-[150px] truncate">
-                              {resolvedCv?.nom_fichier || `CV_${prenom}.pdf`}
+                            <Eye size={13} className="text-[#4f46e5]" />
+                            <span>Voir CV</span>
+                            <span className="max-w-[110px] truncate text-[11px] font-normal text-[#64748b]">
+                              ({resolvedCv?.nom_fichier || `CV_${prenom}.pdf`})
                             </span>
                           </button>
                           <button
                             type="button"
                             onClick={() => downloadCandidateCvFile(c)}
-                            className="grid size-7 place-items-center rounded-lg border border-[#e2e8f0] text-[#475569] hover:bg-[#f1f5f9] hover:text-[#0f172a]"
-                            title="Télécharger le CV"
+                            className="grid size-7 place-items-center rounded-lg border border-[#e2e8f0] text-[#475569] hover:bg-[#f1f5f9] hover:text-[#0f172a] cursor-pointer"
+                            title="Télécharger le fichier CV"
                           >
                             <Download size={13} />
                           </button>
@@ -918,25 +915,16 @@ export function CandidaturesOffreView({
                       {/* Statut */}
                       <td className="px-4 py-4">{getStatusBadge(c.statut)}</td>
 
-                      {/* Actions */}
+                      {/* Actions épurées : uniquement Évaluer */}
                       <td className="py-4 pl-4 pr-6 text-right">
-                        <div className="inline-flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setQuickViewCand(c)}
-                            className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-1.5 text-xs font-bold text-[#334155] hover:bg-[#f8fafc]"
-                          >
-                            Voir CV
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onOpenDetail(c)}
-                            className="inline-flex items-center gap-1 rounded-lg bg-[#4f46e5] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#4338ca] transition"
-                          >
-                            <span>Évaluer</span>
-                            <ChevronRight size={13} />
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onOpenDetail(c)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-[#4f46e5] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#4338ca] transition cursor-pointer"
+                        >
+                          <span>Évaluer</span>
+                          <ChevronRight size={13} />
+                        </button>
                       </td>
                     </tr>
                   );

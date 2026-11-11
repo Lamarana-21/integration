@@ -325,12 +325,12 @@ export function MessagerieView({
           )}
         </div>
       ) : (
-        /* BOÎTE DE MESSAGERIE EN 2 COLONNES */
-        <div className="grid gap-0 lg:grid-cols-[340px_1fr] min-h-[580px] rounded-3xl border border-[#e8ebf3] bg-white shadow-xs overflow-hidden">
-          {/* COLONNE GAUCHE: LISTE DES CONVERSATIONS */}
-          <aside className="border-r border-[#edf0f7] flex flex-col bg-[#fcfdfe]">
+        /* BOÎTE DE MESSAGERIE EN 2 COLONNES STYLE WHATSAPP */
+        <div className="grid gap-0 lg:grid-cols-[330px_1fr] h-[calc(100vh-6rem)] max-h-[780px] rounded-2xl border border-[#e2e8f0] bg-white shadow-xs overflow-hidden">
+          {/* COLONNE GAUCHE: LISTE DES CONVERSATIONS (FIXE ET SCROLLABLE INDÉPENDAMMENT) */}
+          <aside className="border-r border-[#edf0f7] flex flex-col bg-[#fcfdfe] h-full overflow-hidden">
             {/* Barre de recherche et filtre non-lus */}
-            <div className="p-3.5 border-b border-[#edf0f7] space-y-2.5">
+            <div className="p-3 border-b border-[#edf0f7] space-y-2 shrink-0">
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-2.5 text-[#9ea6bb]" />
                 <input
@@ -342,7 +342,7 @@ export function MessagerieView({
                   }
                   value={searchQuery ?? ''}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-xl border border-[#e2e5ef] bg-white pl-9 pr-3 py-2 text-xs text-[#1e2538] outline-none focus:border-[#594be0]"
+                  className="w-full rounded-xl border border-[#e2e5ef] bg-white pl-9 pr-3 py-1.5 text-xs text-[#1e2538] outline-none focus:border-[#594be0]"
                 />
               </div>
 
@@ -405,7 +405,7 @@ export function MessagerieView({
                       key={conv.id}
                       type="button"
                       onClick={() => selectConversation(conv.id)}
-                      className={`w-full text-left p-3.5 flex items-start gap-3 transition ${
+                      className={`w-full text-left p-3 flex items-start gap-2.5 transition ${
                         isSelected
                           ? 'bg-[#f4f2ff] border-l-4 border-[#594be0]'
                           : 'hover:bg-[#f8f9fc]'
@@ -417,10 +417,10 @@ export function MessagerieView({
                           <img
                             src={conv.candidat_avatar}
                             alt={conv.candidat_nom}
-                            className="size-10 rounded-2xl object-cover border border-[#e2e5ef]"
+                            className="size-9 rounded-xl object-cover border border-[#e2e5ef]"
                           />
                         ) : (
-                          <div className="grid size-10 place-items-center rounded-2xl bg-gradient-to-br from-[#6355e8] to-[#4c3ec8] text-white font-black text-xs shadow-xs">
+                          <div className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-[#6355e8] to-[#4c3ec8] text-white font-black text-xs shadow-xs">
                             {primaryTitle?.[0] || 'E'}
                           </div>
                         )}
@@ -444,11 +444,11 @@ export function MessagerieView({
                         </div>
 
                         <div className="text-[11px] font-semibold text-[#594be0] truncate flex items-center gap-1 mt-0.5">
-                          <Briefcase size={11} className="shrink-0 text-[#594be0]" />
+                          <Briefcase size={10} className="shrink-0 text-[#594be0]" />
                           <span className="truncate">{secondarySubtitle}</span>
                         </div>
 
-                        <p className="mt-1 text-[11px] text-[#6e778f] truncate">
+                        <p className="mt-0.5 text-[11px] text-[#6e778f] truncate">
                           {conv.dernier_message || 'Aucun message'}
                         </p>
                       </div>
@@ -460,13 +460,13 @@ export function MessagerieView({
           </aside>
 
           {/* COLONNE DROITE: FIL DE DISCUSSION ACTIF */}
-          <main className="flex flex-col bg-white">
+          <main className="flex flex-col bg-white h-full overflow-hidden">
             {activeConversation ? (
               <>
                 {/* Entête de la discussion active */}
-                <div className="p-4 border-b border-[#edf0f7] flex items-center justify-between bg-white/90 backdrop-blur-xs">
+                <div className="p-3 px-4 border-b border-[#edf0f7] flex items-center justify-between bg-white shrink-0">
                   <div className="flex items-center gap-3">
-                    <div className="grid size-11 place-items-center rounded-2xl bg-[#594be0] text-white font-black text-sm shadow-xs">
+                    <div className="grid size-9 place-items-center rounded-xl bg-[#594be0] text-white font-black text-xs shadow-xs">
                       {(currentRole === 'CANDIDAT'
                         ? activeConversation.entreprise_nom
                         : activeConversation.candidat_nom)?.[0] || 'E'}
@@ -474,13 +474,13 @@ export function MessagerieView({
 
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-black text-sm text-[#171f33]">
+                        <h3 className="font-black text-xs sm:text-sm text-[#171f33]">
                           {currentRole === 'CANDIDAT'
                             ? activeConversation.entreprise_nom
                             : activeConversation.candidat_nom}
                         </h3>
                         <span
-                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold ${
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
                             currentRole === 'CANDIDAT'
                               ? 'bg-[#f0efff] text-[#594be0] border border-[#dcd7fe]'
                               : 'bg-[#ecfdf5] text-[#065f46] border border-[#a7f3d0]'
@@ -530,7 +530,7 @@ export function MessagerieView({
                 </div>
 
                 {/* Zone des bulles de messages */}
-                <div className="flex-1 p-5 overflow-y-auto space-y-3.5 bg-[#fafbfe]/60">
+                <div className="flex-1 p-4 overflow-y-auto space-y-2.5 bg-[#f8fafc]">
                   {activeMessages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full py-12 text-center space-y-2">
                       <div className="grid size-12 place-items-center rounded-2xl bg-[#f4f2ff] text-[#594be0]">
@@ -567,13 +567,13 @@ export function MessagerieView({
                           className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
                         >
                           <div
-                            className={`relative max-w-md sm:max-w-lg rounded-2xl p-3.5 text-xs leading-relaxed shadow-2xs transition ${
+                            className={`relative max-w-[85%] sm:max-w-[70%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed shadow-2xs transition ${
                               isMe
                                 ? 'bg-[#594be0] text-white rounded-br-xs'
                                 : 'bg-white text-[#1f273b] border border-[#e8ebf3] rounded-bl-xs'
                             }`}
                           >
-                            <div className="font-extrabold text-[10px] mb-1 opacity-85 flex items-center justify-between gap-3">
+                            <div className="font-extrabold text-[10px] mb-0.5 opacity-85 flex items-center justify-between gap-3">
                               <span>{displayedSenderName}</span>
                               <span className="text-[9px] font-normal opacity-75">
                                 {displayedRoleLabel}
@@ -583,7 +583,7 @@ export function MessagerieView({
                             <div className="text-[12px] whitespace-pre-wrap">{msg.contenu}</div>
 
                             <div
-                              className={`mt-1.5 flex items-center justify-end gap-1 text-[9px] ${
+                              className={`mt-1 flex items-center justify-end gap-1 text-[9px] ${
                                 isMe ? 'text-white/80' : 'text-[#8e97ae]'
                               }`}
                             >

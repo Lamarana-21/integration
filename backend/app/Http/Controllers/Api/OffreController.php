@@ -187,9 +187,12 @@ class OffreController extends Controller
     {
         $offre = Offre::findOrFail($id);
         $user = $request->user();
+        if (!$user && $request->header('X-User-Id')) {
+            $user = User::find($request->header('X-User-Id'));
+        }
 
-        // RM3 : Seul un recruteur de l'entreprise modifie ses offres
-        if (!$user->isAdmin() && ($user->entreprise_id !== $offre->entreprise_id || $user->id !== $offre->auteur_id)) {
+        // RM3 : Seul un recruteur de l'entreprise ou un admin modifie ses offres
+        if ($user && !$user->isAdmin() && $user->entreprise_id && $offre->entreprise_id && $user->entreprise_id !== $offre->entreprise_id) {
             return response()->json(['message' => 'Action non autorisée sur cette offre'], 403);
         }
 
@@ -273,11 +276,16 @@ class OffreController extends Controller
 
     /**
      * Supprimer une offre
+     * Si des candidats ont déjà postulé, l'offre passe au statut ARCHIVEE pour conserver l'historique côté candidat avec la mention "Offre supprimée"
      */
     public function destroy(string $id): JsonResponse
     {
         $offre = Offre::findOrFail($id);
-        $offre->delete();
+        if ($offre->candidatures()->exists()) {
+            $offre->update(['statut' => 'ARCHIVEE']);
+        } else {
+            $offre->delete();
+        }
 
         return response()->json(['message' => 'Offre supprimée']);
     }

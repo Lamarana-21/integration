@@ -165,6 +165,7 @@ export interface Offre {
   date_publication?: string;
   date_limite?: string;
   statut: JobStatus;
+  supprimee?: boolean;
   entreprise_id: string;
   entreprise?: Entreprise;
   auteur_id: string;
@@ -209,6 +210,7 @@ export interface Candidature {
   candidat?: Candidat;
   offre_id: string;
   offre?: Offre;
+  offre_supprimee?: boolean;
   cv_id: string;
   cv?: CV;
   lettre_motivation?: string;
@@ -220,6 +222,7 @@ export interface Candidature {
   date_entretien?: string;
   type_entretien?: 'VISIO' | 'PRESENTIEL' | 'TELEPHONE';
   lien_ou_lieu_entretien?: string;
+  statut_entretien?: 'PROGRAMME' | 'PASSE' | 'NON_PASSE';
   analyse?: AnalyseCv;
   notes_internes?: NoteInterne[];
   created_at: string;

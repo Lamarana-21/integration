@@ -46,11 +46,11 @@ const itemsByRole: Record<RoleName, { label: string; screen: string; icon: React
   ],
   RECRUTEUR: [
     { label: 'Tableau de bord', screen: 'E7', icon: LayoutDashboard },
-    { label: 'Nouvelle offre', screen: 'E8', icon: BriefcaseBusiness },
+    { label: 'Mes offres', screen: 'E8', icon: BriefcaseBusiness, badgeKey: 'offres' },
     { label: 'Candidatures et analyse IA', screen: 'E9', icon: Users },
+    { label: 'Mes entretiens', screen: 'E_RECRUTEUR_ENTRETIENS', icon: Calendar, badgeKey: 'entretiens' },
     { label: 'Messagerie', screen: 'E_MESSAGES', icon: MessageSquare, badgeKey: 'messages' },
     { label: 'Mon profil', screen: 'E_RECRUTEUR_PROFIL', icon: UserCheck2 },
-    { label: 'Entreprise', screen: 'E11', icon: Building2 },
     { label: 'Paramètres', screen: 'E_SETTINGS', icon: Sliders },
   ],
   ADMIN: [

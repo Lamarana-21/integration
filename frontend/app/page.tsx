@@ -27,6 +27,7 @@ import { ProfilAdminView } from '@/components/screens/ProfilAdminView';
 import { ProfilRecruteurView } from '@/components/screens/ProfilRecruteurView';
 import { DashboardCandidatView } from '@/components/screens/DashboardCandidatView';
 import { EntretiensCandidatView } from '@/components/screens/EntretiensCandidatView';
+import { EntretiensRecruteurView } from '@/components/screens/EntretiensRecruteurView';
 import {
   ApplicationStatus,
   Candidat,
@@ -279,7 +280,7 @@ export default function AppRoot() {
 
   // Définition rigoureuse et exclusive des catégories d'écrans (RBAC)
   const CANDIDATE_EXCLUSIVE = ['E_CANDIDAT_DASHBOARD', 'E5', 'E_ENTRETIENS', 'E6', 'E6_PROFIL', 'E6_CV', 'E_FAVORIS'];
-  const RECRUITER_EXCLUSIVE = ['E7', 'E8', 'E9', 'E10', 'E_RECRUTEUR_PROFIL'];
+  const RECRUTEUR_EXCLUSIVE = ['E7', 'E8', 'E9', 'E10', 'E_RECRUTEUR_ENTRETIENS', 'E_RECRUTEUR_PROFIL'];
   const ADMIN_EXCLUSIVE = ['E_ADMIN_DASHBOARD', 'E12', 'E13', 'E14', 'E15', 'E_ADMIN_PROFIL'];
   const SHARED_AUTH_ROUTES = ['E_MESSAGES', 'E_SETTINGS'];
   const PUBLIC_ROUTES = ['E1', 'E3', 'E11'];
@@ -287,11 +288,11 @@ export default function AppRoot() {
   const isCandidateRoute = (screen: string) =>
     CANDIDATE_EXCLUSIVE.includes(screen) || SHARED_AUTH_ROUTES.includes(screen) || PUBLIC_ROUTES.includes(screen);
   const isRecruiterRoute = (screen: string) =>
-    RECRUITER_EXCLUSIVE.includes(screen) || SHARED_AUTH_ROUTES.includes(screen) || PUBLIC_ROUTES.includes(screen);
+    RECRUTEUR_EXCLUSIVE.includes(screen) || SHARED_AUTH_ROUTES.includes(screen) || (currentRole !== 'RECRUTEUR' && PUBLIC_ROUTES.includes(screen));
   const isAdminRoute = (screen: string) =>
     ADMIN_EXCLUSIVE.includes(screen) || SHARED_AUTH_ROUTES.includes(screen) || PUBLIC_ROUTES.includes(screen);
   const isProtectedRoute = (screen: string) =>
-    CANDIDATE_EXCLUSIVE.includes(screen) || RECRUITER_EXCLUSIVE.includes(screen) || ADMIN_EXCLUSIVE.includes(screen) || SHARED_AUTH_ROUTES.includes(screen);
+    CANDIDATE_EXCLUSIVE.includes(screen) || RECRUTEUR_EXCLUSIVE.includes(screen) || ADMIN_EXCLUSIVE.includes(screen) || SHARED_AUTH_ROUTES.includes(screen);
 
   // Contrôleur de navigation avec garde de sécurité
   const handleNavigate = (targetScreen: string) => {
@@ -497,11 +498,11 @@ export default function AppRoot() {
         if (targetScreen === 'E6') targetScreen = 'E6_PROFIL';
 
         // Contrôle d'accès basé sur les rôles (RBAC) - UNIQUEMENT si l'écran demandé est strictement interdit au rôle
-        if (userRole === 'CANDIDAT' && (RECRUITER_EXCLUSIVE.includes(targetScreen) || ADMIN_EXCLUSIVE.includes(targetScreen))) {
+        if (userRole === 'CANDIDAT' && (RECRUTEUR_EXCLUSIVE.includes(targetScreen) || ADMIN_EXCLUSIVE.includes(targetScreen))) {
           targetScreen = 'E_CANDIDAT_DASHBOARD';
-        } else if (userRole === 'RECRUTEUR' && (CANDIDATE_EXCLUSIVE.includes(targetScreen) || ADMIN_EXCLUSIVE.includes(targetScreen))) {
+        } else if (userRole === 'RECRUTEUR' && (CANDIDATE_EXCLUSIVE.includes(targetScreen) || ADMIN_EXCLUSIVE.includes(targetScreen) || targetScreen === 'E11')) {
           targetScreen = 'E7';
-        } else if (userRole === 'ADMIN' && (CANDIDATE_EXCLUSIVE.includes(targetScreen) || RECRUITER_EXCLUSIVE.includes(targetScreen))) {
+        } else if (userRole === 'ADMIN' && (CANDIDATE_EXCLUSIVE.includes(targetScreen) || RECRUTEUR_EXCLUSIVE.includes(targetScreen))) {
           targetScreen = 'E_ADMIN_DASHBOARD';
         }
 
@@ -608,17 +609,17 @@ export default function AppRoot() {
         }
 
         // Contrôle d'accès RBAC lors du retour arrière
-        if (currentUser && currentRole === 'CANDIDAT' && (RECRUITER_EXCLUSIVE.includes(target) || ADMIN_EXCLUSIVE.includes(target))) {
+        if (currentUser && currentRole === 'CANDIDAT' && (RECRUTEUR_EXCLUSIVE.includes(target) || ADMIN_EXCLUSIVE.includes(target))) {
           window.history.replaceState(null, '', '#E_CANDIDAT_DASHBOARD');
           setActiveScreen('E_CANDIDAT_DASHBOARD');
           return;
         }
-        if (currentUser && currentRole === 'RECRUTEUR' && (CANDIDATE_EXCLUSIVE.includes(target) || ADMIN_EXCLUSIVE.includes(target))) {
+        if (currentUser && currentRole === 'RECRUTEUR' && (CANDIDATE_EXCLUSIVE.includes(target) || ADMIN_EXCLUSIVE.includes(target) || target === 'E11')) {
           window.history.replaceState(null, '', '#E7');
           setActiveScreen('E7');
           return;
         }
-        if (currentUser && currentRole === 'ADMIN' && (CANDIDATE_EXCLUSIVE.includes(target) || RECRUITER_EXCLUSIVE.includes(target))) {
+        if (currentUser && currentRole === 'ADMIN' && (CANDIDATE_EXCLUSIVE.includes(target) || RECRUTEUR_EXCLUSIVE.includes(target))) {
           window.history.replaceState(null, '', '#E_ADMIN_DASHBOARD');
           setActiveScreen('E_ADMIN_DASHBOARD');
           return;
@@ -1031,7 +1032,7 @@ export default function AppRoot() {
       sessionStorage.setItem('talenta_current_user', JSON.stringify(recUser));
       sessionStorage.setItem('talenta_current_role', 'RECRUTEUR');
 
-      if (!['E7', 'E8', 'E9', 'E10', 'E11', 'E_MESSAGES', 'E_SETTINGS', 'E_RECRUTEUR_PROFIL'].includes(activeScreen)) {
+      if (!['E7', 'E8', 'E9', 'E10', 'E_RECRUTEUR_ENTRETIENS', 'E_MESSAGES', 'E_SETTINGS', 'E_RECRUTEUR_PROFIL'].includes(activeScreen)) {
         setActiveScreen('E7');
         sessionStorage.setItem('talenta_active_screen', 'E7');
       }
@@ -1684,6 +1685,66 @@ export default function AppRoot() {
     );
   };
 
+  // Delete Job Offer -> Persistance MySQL + Conservation de la mention supprimée pour les candidats ayant postulé
+  const handleDeleteJob = async (jobId: string) => {
+    // 1. Sauvegarder dans le localStorage des offres supprimées
+    try {
+      const raw = localStorage.getItem('talenta_deleted_offres_v2');
+      const deletedIds: string[] = raw ? JSON.parse(raw) : [];
+      if (!deletedIds.includes(jobId)) {
+        deletedIds.push(jobId);
+        localStorage.setItem('talenta_deleted_offres_v2', JSON.stringify(deletedIds));
+      }
+    } catch {}
+
+    // 2. Appel API Laravel
+    api.deleteOffre(jobId).catch(() => {});
+
+    // 3. Mettre à jour l'état local des offres
+    setOffres((prev) =>
+      prev.map((o) => (o.id === jobId ? { ...o, statut: 'ARCHIVEE' as JobStatus, supprimee: true } : o))
+    );
+
+    // 4. Mettre à jour les candidatures associées pour marquer offre_supprimee = true
+    setCandidatures((prev) =>
+      prev.map((c) =>
+        c.offre_id === jobId
+          ? {
+              ...c,
+              offre_supprimee: true,
+              offre: c.offre
+                ? { ...c.offre, supprimee: true, statut: 'ARCHIVEE' as JobStatus }
+                : undefined,
+            }
+          : c
+      )
+    );
+  };
+
+  // Mettre à jour l'état de l'entretien (PROGRAMME | PASSE | NON_PASSE) par le recruteur
+  const handleUpdateInterviewStatus = (
+    candId: string,
+    statutEntretien: 'PROGRAMME' | 'PASSE' | 'NON_PASSE'
+  ) => {
+    const existingCand = candidatures.find((c) => c.id === candId);
+    const updatedDecision: StoredDecision = {
+      statut: existingCand?.statut || 'ENTRETIEN',
+      etapes_validees: existingCand?.etapes_validees,
+      etape_avant_decision: existingCand?.etape_avant_decision,
+      commentaire_recruteur: existingCand?.commentaire_recruteur,
+      date_entretien: existingCand?.date_entretien,
+      type_entretien: existingCand?.type_entretien,
+      lien_ou_lieu_entretien: existingCand?.lien_ou_lieu_entretien,
+      updated_at: new Date().toISOString().split('T')[0],
+    };
+
+    saveDecisionToStorage([candId], updatedDecision);
+
+    setCandidatures((prev) =>
+      prev.map((c) => (c.id === candId ? { ...c, statut_entretien: statutEntretien } : c))
+    );
+  };
+
   // Candidatures associées au candidat connecté (résolution multi-critères robuste et tolérante aux alias)
   const candidateApplications = useMemo(() => {
     if (!currentUser) return [];
@@ -1949,14 +2010,31 @@ export default function AppRoot() {
             />
           )}
 
-          {/* E8 : Création et Édition d'Offre Protégé */}
+          {/* E8 : Mes Offres & Création/Édition d'Offre Protégé */}
           {activeScreen === 'E8' && currentUser && (
             <NouvelleOffreView
               initialOffre={editingOffre}
+              offres={offres}
+              candidatures={candidatures}
               entreprises={entreprises}
               currentUser={currentUser}
               onSave={handleSaveJob}
               onCancel={() => handleNavigate('E7')}
+              onEditJob={(job) => setEditingOffre(job)}
+              onCloseJob={handleCloseJob}
+              onDeleteJob={handleDeleteJob}
+            />
+          )}
+
+          {/* E_RECRUTEUR_ENTRETIENS : Mes entretiens candidats côté recruteur */}
+          {activeScreen === 'E_RECRUTEUR_ENTRETIENS' && currentUser && (
+            <EntretiensRecruteurView
+              candidatures={candidatures}
+              onOpenDetail={(cand) => {
+                setSelectedCandidatureForDetail(cand);
+                handleNavigate('E10');
+              }}
+              onUpdateInterviewStatus={handleUpdateInterviewStatus}
             />
           )}
 
