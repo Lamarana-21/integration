@@ -4,6 +4,7 @@ import React from 'react';
 import {
   BriefcaseBusiness,
   Building2,
+  Calendar,
   FileText,
   Heart,
   LayoutDashboard,
@@ -23,9 +24,10 @@ interface SidebarProps {
   favorisCount?: number;
   unreadMessagesCount?: number;
   offresCount?: number;
+  entretiensCount?: number;
 }
 
-const itemsByRole: Record<RoleName, { label: string; screen: string; icon: React.ElementType; badgeKey?: 'favoris' | 'messages' | 'offres' }[]> = {
+const itemsByRole: Record<RoleName, { label: string; screen: string; icon: React.ElementType; badgeKey?: 'favoris' | 'messages' | 'offres' | 'entretiens' }[]> = {
   VISITEUR: [
     { label: 'Explorer les offres', screen: 'E1', icon: Search, badgeKey: 'offres' },
     { label: 'Entreprises', screen: 'E11', icon: Building2 },
@@ -35,6 +37,7 @@ const itemsByRole: Record<RoleName, { label: string; screen: string; icon: React
     { label: 'Explorer les offres', screen: 'E1', icon: Search, badgeKey: 'offres' },
     { label: 'Offres favorites', screen: 'E_FAVORIS', icon: Heart, badgeKey: 'favoris' },
     { label: 'Mes candidatures', screen: 'E5', icon: FileText },
+    { label: 'Entretiens & Convocations', screen: 'E_ENTRETIENS', icon: Calendar, badgeKey: 'entretiens' },
     { label: 'Messagerie', screen: 'E_MESSAGES', icon: MessageSquare, badgeKey: 'messages' },
     { label: 'Mon profil', screen: 'E6_PROFIL', icon: UserCheck2 },
     { label: 'Mes CV', screen: 'E6_CV', icon: FileText },
@@ -68,6 +71,7 @@ export function Sidebar({
   favorisCount = 0,
   unreadMessagesCount = 0,
   offresCount = 0,
+  entretiensCount = 0,
 }: SidebarProps) {
   return (
     <aside className="fixed inset-y-0 left-0 top-16 z-30 hidden w-64 overflow-y-auto border-r border-[#e8ebf3] bg-white lg:block">
@@ -90,6 +94,8 @@ export function Sidebar({
                 ? unreadMessagesCount
                 : badgeKey === 'offres'
                 ? offresCount
+                : badgeKey === 'entretiens'
+                ? entretiensCount
                 : 0;
 
             return (
@@ -113,6 +119,8 @@ export function Sidebar({
                         ? 'bg-[#ffe4e6] text-[#e11d48]'
                         : badgeKey === 'offres'
                         ? 'bg-[#edeaff] text-[#5547d7]'
+                        : badgeKey === 'entretiens'
+                        ? 'bg-[#dcfce7] text-[#15803d]'
                         : 'bg-[#594be0] text-white'
                     }`}
                   >

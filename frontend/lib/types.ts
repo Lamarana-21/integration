@@ -71,19 +71,55 @@ export interface Formation {
   description?: string;
 }
 
+export interface ProjetCv {
+  id?: string;
+  nom: string;
+  description: string;
+  technologies?: string[];
+  lien?: string;
+}
+
+export interface CertificationCv {
+  id?: string;
+  nom: string;
+  organisme: string;
+  annee: string;
+}
+
+export type CvTemplateStyle = 'moderne' | 'minimaliste' | 'corporate' | 'creatif';
+
+export interface CvConfig {
+  titre_poste?: string;
+  resume?: string;
+  accent_color?: string;
+  show_photo?: boolean;
+  show_links?: boolean;
+  show_disponibilite?: boolean;
+  competences?: string[];
+  experiences?: Experience[];
+  formations?: Formation[];
+  langues?: string[];
+  projets?: ProjetCv[];
+  certifications?: CertificationCv[];
+}
+
 export interface CV {
   id: string;
   candidat_id: string;
   nom_fichier: string;
+  titre_personnalise?: string;
   type_mime: string;
   taille_octets: number;
   url_stockage: string;
+  contenu_base64?: string;
   created_at?: string;
+  updated_at?: string;
   est_principal?: boolean;
   score_ia?: number;
   est_genere?: boolean;
   source_type?: 'DYNAMIQUE' | 'FICHIER_LOCAL' | 'ENREGISTRE';
-  template_style?: 'moderne' | 'minimaliste' | 'corporate';
+  template_style?: CvTemplateStyle;
+  cv_config?: CvConfig;
 }
 
 export interface Candidat {
@@ -178,6 +214,8 @@ export interface Candidature {
   lettre_motivation?: string;
   message?: string;
   statut: ApplicationStatus;
+  etapes_validees?: ApplicationStatus[];
+  etape_avant_decision?: ApplicationStatus;
   commentaire_recruteur?: string;
   date_entretien?: string;
   type_entretien?: 'VISIO' | 'PRESENTIEL' | 'TELEPHONE';

@@ -26,6 +26,7 @@ import { DashboardAdminView } from '@/components/screens/DashboardAdminView';
 import { ProfilAdminView } from '@/components/screens/ProfilAdminView';
 import { ProfilRecruteurView } from '@/components/screens/ProfilRecruteurView';
 import { DashboardCandidatView } from '@/components/screens/DashboardCandidatView';
+import { EntretiensCandidatView } from '@/components/screens/EntretiensCandidatView';
 import {
   ApplicationStatus,
   Candidat,
@@ -60,6 +61,182 @@ import {
   INITIAL_USERS,
 } from '@/lib/initialData';
 import { api } from '@/lib/api';
+
+const DEPOSITED_CVS_STORAGE_KEY = 'talenta_deposited_cvs_v2';
+const DECISIONS_STORAGE_KEY = 'talenta_decisions_v2';
+
+interface StoredDecision {
+  statut: ApplicationStatus;
+  etapes_validees?: ApplicationStatus[];
+  etape_avant_decision?: ApplicationStatus;
+  commentaire_recruteur?: string;
+  date_entretien?: string;
+  type_entretien?: 'VISIO' | 'PRESENTIEL' | 'TELEPHONE';
+  lien_ou_lieu_entretien?: string;
+  updated_at?: string;
+}
+
+export function computeSequentialSteps(
+  prevStatut: ApplicationStatus,
+  prevValidated: ApplicationStatus[] | undefined,
+  newStatus: ApplicationStatus
+): { etapes_validees: ApplicationStatus[]; etape_avant_decision?: ApplicationStatus } {
+  const ordered: ApplicationStatus[] = ['RECUE', 'EN_EXAMEN', 'PRESELECTIONNEE', 'ENTRETIEN'];
+  const currentSet = new Set<ApplicationStatus>(prevValidated && prevValidated.length > 0 ? prevValidated : ['RECUE']);
+
+  // S'assurer que les étapes jusqu'au statut précédent étaient bien validées
+  const prevIdx = ordered.indexOf(prevStatut);
+  if (prevIdx >= 0) {
+    for (let i = 0; i <= prevIdx; i++) {
+      currentSet.add(ordered[i]);
+    }
+  }
+
+  if (newStatus === 'ACCEPTEE') {
+    // Si accepté, toutes les étapes préalables du processus sont validées
+    return {
+      etapes_validees: ['RECUE', 'EN_EXAMEN', 'PRESELECTIONNEE', 'ENTRETIEN', 'ACCEPTEE'],
+      etape_avant_decision: prevStatut !== 'ACCEPTEE' && prevStatut !== 'REFUSEE' ? prevStatut : 'ENTRETIEN',
+    };
+  }
+
+  if (newStatus === 'REFUSEE') {
+    // Si refusé, au minimum RECUE et EN_EXAMEN ont eu lieu, et on garde uniquement les étapes réellement franchies avant le refus
+    currentSet.add('RECUE');
+    currentSet.add('EN_EXAMEN');
+    currentSet.delete('ACCEPTEE');
+    currentSet.add('REFUSEE');
+    return {
+      etapes_validees: Array.from(currentSet),
+      etape_avant_decision: prevStatut !== 'REFUSEE' && prevStatut !== 'ACCEPTEE' ? prevStatut : 'EN_EXAMEN',
+    };
+  }
+
+  const targetIdx = ordered.indexOf(newStatus);
+  const nextValidated: ApplicationStatus[] = [];
+  if (targetIdx >= 0) {
+    for (let i = 0; i <= targetIdx; i++) {
+      nextValidated.push(ordered[i]);
+    }
+  } else {
+    nextValidated.push('RECUE');
+  }
+  return {
+    etapes_validees: nextValidated,
+    etape_avant_decision: newStatus,
+  };
+}
+
+function saveDecisionToStorage(keys: string[], decision: StoredDecision) {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(DECISIONS_STORAGE_KEY);
+    const map: Record<string, StoredDecision> = raw ? JSON.parse(raw) : {};
+    keys.filter(Boolean).forEach((k) => {
+      map[k] = decision;
+    });
+    localStorage.setItem(DECISIONS_STORAGE_KEY, JSON.stringify(map));
+  } catch {}
+}
+
+function readFileAsBase64(file: File): Promise<{ base64: string; dataUrl: string }> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
+      resolve({ base64, dataUrl });
+    };
+    reader.onerror = () => resolve({ base64: '', dataUrl: '' });
+    reader.readAsDataURL(file);
+  });
+}
+
+function saveDepositedCvToStorage(keys: string[], cv: import('@/lib/types').CV) {
+  if (typeof window === 'undefined' || !cv) return;
+  try {
+    const raw = localStorage.getItem(DEPOSITED_CVS_STORAGE_KEY);
+    const map: Record<string, import('@/lib/types').CV> = raw ? JSON.parse(raw) : {};
+    keys.filter(Boolean).forEach((k) => {
+      map[k] = cv;
+    });
+    localStorage.setItem(DEPOSITED_CVS_STORAGE_KEY, JSON.stringify(map));
+  } catch (e) {
+    console.warn('Stockage local CV volumineux ignoré:', e);
+  }
+}
+
+function hydrateCandidaturesWithDepositedCvs(cands: Candidature[]): Candidature[] {
+  if (typeof window === 'undefined') return cands;
+  try {
+    const rawCvs = localStorage.getItem(DEPOSITED_CVS_STORAGE_KEY);
+    const cvMap: Record<string, import('@/lib/types').CV> = rawCvs ? JSON.parse(rawCvs) : {};
+    const rawDecisions = localStorage.getItem(DECISIONS_STORAGE_KEY);
+    const decMap: Record<string, StoredDecision> = rawDecisions ? JSON.parse(rawDecisions) : {};
+
+    return cands.map((c) => {
+      const candidateUserId = c.candidat?.utilisateur_id || c.candidat?.user?.id || '';
+      const candidateEmail = (c.candidat?.user?.email || '').toLowerCase().trim();
+      const candidateFullName = `${c.candidat?.prenom || c.candidat?.user?.prenom || ''}_${c.candidat?.nom || c.candidat?.user?.nom || ''}`
+        .toLowerCase()
+        .trim();
+      const offreTitleKey = (c.offre?.titre || '').toLowerCase().trim();
+
+      const cvMatch =
+        cvMap[c.id] ||
+        (c.cv_id ? cvMap[c.cv_id] : undefined) ||
+        cvMap[`${c.candidat_id}_${c.offre_id}`] ||
+        (candidateUserId ? cvMap[`${candidateUserId}_${c.offre_id}`] : undefined) ||
+        (candidateEmail ? cvMap[`${candidateEmail}_${c.offre_id}`] : undefined) ||
+        (candidateEmail && offreTitleKey ? cvMap[`${candidateEmail}_${offreTitleKey}`] : undefined) ||
+        (candidateFullName && offreTitleKey ? cvMap[`${candidateFullName}_${offreTitleKey}`] : undefined);
+
+      const decMatch =
+        decMap[c.id] ||
+        decMap[`${c.candidat_id}_${c.offre_id}`] ||
+        (candidateUserId ? decMap[`${candidateUserId}_${c.offre_id}`] : undefined) ||
+        (candidateEmail ? decMap[`${candidateEmail}_${c.offre_id}`] : undefined) ||
+        (candidateEmail && offreTitleKey ? decMap[`${candidateEmail}_${offreTitleKey}`] : undefined) ||
+        (candidateFullName && c.offre_id ? decMap[`${candidateFullName}_${c.offre_id}`] : undefined) ||
+        (candidateFullName && offreTitleKey ? decMap[`${candidateFullName}_${offreTitleKey}`] : undefined);
+
+      let nextCand: Candidature = { ...c };
+
+      if (cvMatch) {
+        nextCand = {
+          ...nextCand,
+          cv: {
+            ...(nextCand.cv || {}),
+            ...cvMatch,
+            contenu_base64: cvMatch.contenu_base64 || nextCand.cv?.contenu_base64,
+            url_stockage: cvMatch.url_stockage || nextCand.cv?.url_stockage || '',
+          },
+        };
+      }
+
+      if (decMatch) {
+        nextCand = {
+          ...nextCand,
+          statut: decMatch.statut || nextCand.statut,
+          etapes_validees: decMatch.etapes_validees || nextCand.etapes_validees,
+          etape_avant_decision: decMatch.etape_avant_decision || nextCand.etape_avant_decision,
+          commentaire_recruteur:
+            decMatch.commentaire_recruteur !== undefined
+              ? decMatch.commentaire_recruteur
+              : nextCand.commentaire_recruteur,
+          date_entretien: decMatch.date_entretien || nextCand.date_entretien,
+          type_entretien: decMatch.type_entretien || nextCand.type_entretien,
+          lien_ou_lieu_entretien: decMatch.lien_ou_lieu_entretien || nextCand.lien_ou_lieu_entretien,
+          updated_at: decMatch.updated_at || nextCand.updated_at,
+        };
+      }
+
+      return nextCand;
+    });
+  } catch {
+    return cands;
+  }
+}
 
 export default function AppRoot() {
   const [isMounted, setIsMounted] = useState(false);
@@ -101,7 +278,7 @@ export default function AppRoot() {
   const [postulerOffreTarget, setPostulerOffreTarget] = useState<Offre | null>(null);
 
   // Définition rigoureuse et exclusive des catégories d'écrans (RBAC)
-  const CANDIDATE_EXCLUSIVE = ['E_CANDIDAT_DASHBOARD', 'E5', 'E6', 'E6_PROFIL', 'E6_CV', 'E_FAVORIS'];
+  const CANDIDATE_EXCLUSIVE = ['E_CANDIDAT_DASHBOARD', 'E5', 'E_ENTRETIENS', 'E6', 'E6_PROFIL', 'E6_CV', 'E_FAVORIS'];
   const RECRUITER_EXCLUSIVE = ['E7', 'E8', 'E9', 'E10', 'E_RECRUTEUR_PROFIL'];
   const ADMIN_EXCLUSIVE = ['E_ADMIN_DASHBOARD', 'E12', 'E13', 'E14', 'E15', 'E_ADMIN_PROFIL'];
   const SHARED_AUTH_ROUTES = ['E_MESSAGES', 'E_SETTINGS'];
@@ -147,20 +324,31 @@ export default function AppRoot() {
       }).catch(() => {});
     }
 
-    // Synchronisation dynamique immédiate des candidatures si navigation vers Mes candidatures (E5)
-    if (screen === 'E5') {
+    // Synchronisation dynamique immédiate des candidatures et décisions
+    if (screen === 'E5' || screen === 'E_ENTRETIENS' || screen === 'E_CANDIDAT_DASHBOARD' || screen === 'E7' || screen === 'E9') {
+      setCandidatures((prev) => hydrateCandidaturesWithDepositedCvs(prev));
       api.getAllCandidatures().then((dbCands) => {
-        if (dbCands && dbCands.length > 0) setCandidatures(dbCands);
-      }).catch(() => {});
-      api.getMesCandidatures().then((myCands) => {
-        if (myCands && myCands.length > 0) {
+        if (dbCands && dbCands.length > 0) {
+          const hydrated = hydrateCandidaturesWithDepositedCvs(dbCands);
           setCandidatures((prev) => {
-            const myIds = new Set(myCands.map((c) => c.id));
-            const others = prev.filter((c) => !myIds.has(c.id));
-            return [...myCands, ...others];
+            const dbIds = new Set(hydrated.map((c) => c.id));
+            const unsynced = hydrateCandidaturesWithDepositedCvs(prev.filter((c) => !dbIds.has(c.id)));
+            return [...hydrated, ...unsynced];
           });
         }
       }).catch(() => {});
+      if (screen === 'E5' || screen === 'E_ENTRETIENS' || screen === 'E_CANDIDAT_DASHBOARD') {
+        api.getMesCandidatures().then((myCands) => {
+          if (myCands && myCands.length > 0) {
+            const hydratedMy = hydrateCandidaturesWithDepositedCvs(myCands);
+            setCandidatures((prev) => {
+              const myIds = new Set(hydratedMy.map((c) => c.id));
+              const others = hydrateCandidaturesWithDepositedCvs(prev.filter((c) => !myIds.has(c.id)));
+              return [...hydratedMy, ...others];
+            });
+          }
+        }).catch(() => {});
+      }
     }
 
     // Synchronisation dynamique des entreprises si navigation vers Entreprises (E11) ou Admin (E14)
@@ -339,7 +527,7 @@ export default function AppRoot() {
           if (dbOffres && dbOffres.length > 0) {
             setOffres(dbOffres);
           }
-          if (dbCands && dbCands.length > 0) setCandidatures(dbCands);
+          if (dbCands && dbCands.length > 0) setCandidatures(hydrateCandidaturesWithDepositedCvs(dbCands));
           if (dbEnts && dbEnts.length > 0) setEntreprises(dbEnts);
           if (dbRoles && dbRoles.length > 0) setRoles(dbRoles);
           if (dbPerms && dbPerms.length > 0) setAllPermissions(dbPerms);
@@ -348,11 +536,39 @@ export default function AppRoot() {
         .catch((err) => {
           console.warn('Chargement des données MySQL:', err);
         });
+
+      // Restauration des conversations, messages et décisions dynamiques
+      try {
+        const savedConvs = localStorage.getItem('talenta_conversations_v2');
+        const savedMsgs = localStorage.getItem('talenta_messages_v2');
+        if (savedConvs) setConversations(JSON.parse(savedConvs));
+        if (savedMsgs) setMessages(JSON.parse(savedMsgs));
+        setCandidatures((prev) => hydrateCandidaturesWithDepositedCvs(prev));
+      } catch {}
     } catch (err) {
       console.error('Erreur restauration session Talenta:', err);
     } finally {
       setIsMounted(true);
     }
+  }, []);
+
+  // Synchronisation inter-onglets en temps réel (décisions recruteur, CV déposés, messagerie)
+  useEffect(() => {
+    const handleStorageSync = (e: StorageEvent) => {
+      if (e.key === DECISIONS_STORAGE_KEY || e.key === DEPOSITED_CVS_STORAGE_KEY) {
+        setCandidatures((prev) => hydrateCandidaturesWithDepositedCvs(prev));
+      } else if (e.key === 'talenta_conversations_v2' && e.newValue) {
+        try {
+          setConversations(JSON.parse(e.newValue));
+        } catch {}
+      } else if (e.key === 'talenta_messages_v2' && e.newValue) {
+        try {
+          setMessages(JSON.parse(e.newValue));
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorageSync);
+    return () => window.removeEventListener('storage', handleStorageSync);
   }, []);
 
   // Synchronisation activeScreen -> sessionStorage & URL hash
@@ -436,6 +652,15 @@ export default function AppRoot() {
       }
     } catch (e) {}
   }, [currentUser, isMounted]);
+
+  // Persistance des conversations et messages (pour synchroniser les réponses écrites par les recruteurs)
+  useEffect(() => {
+    if (!isMounted) return;
+    try {
+      localStorage.setItem('talenta_conversations_v2', JSON.stringify(conversations));
+      localStorage.setItem('talenta_messages_v2', JSON.stringify(messages));
+    } catch {}
+  }, [conversations, messages, isMounted]);
 
   // Mise à jour du profil candidat avec persistance immédiate en base de données (MySQL via Laravel)
   const handleUpdateCandidatProfile = async (updated: Partial<Candidat>) => {
@@ -679,7 +904,7 @@ export default function AppRoot() {
     });
   };
 
-  // Initier une conversation depuis une offre
+  // Initier une conversation avec l'entreprise depuis une offre
   const handleContactRecruiter = (offre: Offre) => {
     if (!currentUser) {
       setAuthModalTab('login');
@@ -687,14 +912,16 @@ export default function AppRoot() {
       return;
     }
 
-    const candId = currentUser.id || 'u-cand-amina';
-    const candName = `${currentUser.prenom} ${currentUser.nom}`.trim() || 'Amina Ben Salem';
-    const recruteurName = offre.entreprise?.nom ? `Recruteur (${offre.entreprise.nom})` : 'Responsable RH';
+    const staticMockIds = ['conv-1', 'conv-2', 'conv-3', 'conv-4', 'conv-5'];
+    const candId = currentUser.id;
+    const candName = `${currentUser.prenom} ${currentUser.nom}`.trim();
+    const entrepriseName = offre.entreprise?.nom || 'Entreprise partenaire';
     const recruteurId = offre.entreprise?.nom?.toLowerCase().includes('beta') ? 'u-rec-beta' : 'u-rec-alpha';
 
     let existing = conversations.find(
       (c) =>
-        (c.candidat_id === candId || c.candidat_nom.toLowerCase().trim() === candName.toLowerCase().trim()) &&
+        !staticMockIds.includes(c.id) &&
+        (c.candidat_id === candId || (candName && c.candidat_nom.toLowerCase().trim() === candName.toLowerCase().trim())) &&
         (c.offre_id === offre.id || (c.entreprise_id && c.entreprise_id === offre.entreprise_id))
     );
 
@@ -705,15 +932,15 @@ export default function AppRoot() {
         candidat_nom: candName,
         candidat_avatar: currentUser.avatar_url,
         recruteur_id: recruteurId,
-        recruteur_nom: recruteurName,
+        recruteur_nom: entrepriseName,
         entreprise_id: offre.entreprise_id || 'c-alpha',
-        entreprise_nom: offre.entreprise?.nom || 'Entreprise partenaire',
+        entreprise_nom: entrepriseName,
         offre_id: offre.id,
         offre_titre: offre.titre,
-        dernier_message: `Discussion initiée à propos de l'offre : ${offre.titre}`,
+        dernier_message: '',
         updated_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
         non_lus_candidat: 0,
-        non_lus_recruteur: 1,
+        non_lus_recruteur: 0,
       };
       const newConvs = [existing, ...conversations];
       setConversations(newConvs);
@@ -723,19 +950,24 @@ export default function AppRoot() {
     handleNavigate('E_MESSAGES');
   };
 
-  // Total messages non lus adapté à l'acteur connecté
+  // Total messages non lus adapté à l'acteur connecté (isolé par candidat)
   const totalUnreadMessages = useMemo(() => {
     if (!currentUser) return 0;
     if (currentRole === 'CANDIDAT') {
-      const curId = currentUser.id;
-      const curName = `${currentUser.prenom} ${currentUser.nom}`.toLowerCase().trim();
+      const staticMockIds = ['conv-1', 'conv-2', 'conv-3', 'conv-4', 'conv-5'];
+      const curId = String(currentUser.id || '').trim().toLowerCase();
+      const candProfId = String(candidatProfile?.id || '').trim().toLowerCase();
+      const curName = `${currentUser.prenom || ''} ${currentUser.nom || ''}`.toLowerCase().trim();
       return conversations
-        .filter(
-          (c) =>
-            c.candidat_id === curId ||
-            c.candidat_nom.toLowerCase().trim() === curName ||
-            c.candidat_id === 'u-cand-amina'
-        )
+        .filter((c) => {
+          if (staticMockIds.includes(c.id)) return false;
+          const cId = String(c.candidat_id || '').trim().toLowerCase();
+          const cName = String(c.candidat_nom || '').toLowerCase().trim();
+          if (curId && cId === curId) return true;
+          if (candProfId && cId === candProfId) return true;
+          if (curName.length > 2 && cName === curName) return true;
+          return false;
+        })
         .reduce((acc, c) => acc + (c.non_lus_candidat || 0), 0);
     } else if (currentRole === 'RECRUTEUR') {
       const curRecId = currentUser.id;
@@ -750,7 +982,7 @@ export default function AppRoot() {
         .reduce((acc, c) => acc + (c.non_lus_recruteur || 0), 0);
     }
     return 0;
-  }, [currentUser, currentRole, conversations]);
+  }, [currentUser, currentRole, conversations, candidatProfile]);
 
   // Handle Actor Role Switch / Logout
   const handleRoleChange = (role: RoleName) => {
@@ -788,7 +1020,7 @@ export default function AppRoot() {
         }
       }).catch(() => {});
 
-      if (!['E_CANDIDAT_DASHBOARD', 'E6_PROFIL', 'E6_CV', 'E5', 'E1', 'E3', 'E11', 'E_FAVORIS', 'E_MESSAGES', 'E_SETTINGS'].includes(activeScreen)) {
+      if (!['E_CANDIDAT_DASHBOARD', 'E6_PROFIL', 'E6_CV', 'E5', 'E_ENTRETIENS', 'E1', 'E3', 'E11', 'E_FAVORIS', 'E_MESSAGES', 'E_SETTINGS'].includes(activeScreen)) {
         setActiveScreen('E_CANDIDAT_DASHBOARD');
         sessionStorage.setItem('talenta_active_screen', 'E_CANDIDAT_DASHBOARD');
       }
@@ -872,24 +1104,28 @@ export default function AppRoot() {
     const computedScore = Math.min(97, Math.max(55, Math.round(matchRatio * 80 + 17)));
 
     if (file) {
+      const { base64, dataUrl } = await readFileAsBase64(file);
       const formData = new FormData();
       formData.append('cv_file', file);
       const upload = await api.uploadCv(formData);
       if (!upload.success || !upload.data) {
-        // Fallback fichier local gracieux si backend mocké
+        // Fallback fichier local gracieux avec le vrai contenu PDF en base64
         cvToUse = {
           id: `cv-upload-${Date.now()}`,
           candidat_id: candidatProfile.id,
           nom_fichier: file.name,
           type_mime: file.type || 'application/pdf',
           taille_octets: file.size,
-          url_stockage: URL.createObjectURL(file),
+          url_stockage: dataUrl || URL.createObjectURL(file),
+          contenu_base64: base64,
           created_at: new Date().toISOString().split('T')[0],
           source_type: 'FICHIER_LOCAL',
         };
       } else {
         cvToUse = {
           ...upload.data,
+          url_stockage: dataUrl || upload.data.url_stockage,
+          contenu_base64: base64 || upload.data.contenu_base64,
           source_type: 'FICHIER_LOCAL',
         };
       }
@@ -950,19 +1186,40 @@ export default function AppRoot() {
       return { error: 'Aucun CV sélectionné pour cette candidature.' };
     }
 
-    // Persistance directe dans la base de données MySQL
+    // Persistance directe dans la base de données MySQL avec le payload complet du CV déposé
     const postulerRes = await api.postuler({
       offre_id: offreId,
       cv_id: cvToUse.id,
       candidat_id: candidatProfile.id,
       lettre_motivation: '',
+      cv_payload: {
+        nom_fichier: cvToUse.nom_fichier,
+        type_mime: cvToUse.type_mime || 'application/pdf',
+        taille_octets: cvToUse.taille_octets || 2048,
+        contenu_base64: cvToUse.contenu_base64,
+      },
     });
 
     const serverCand = postulerRes.data?.candidature;
     const resolvedUserId = currentUser?.id || candidatProfile.utilisateur_id || 'u-cand-amina';
+    const mergedCv: import('@/lib/types').CV = {
+      ...(serverCand?.cv || {}),
+      ...cvToUse,
+      id: serverCand?.cv?.id || cvToUse.id,
+      nom_fichier: cvToUse.nom_fichier || serverCand?.cv?.nom_fichier || 'CV_Candidat.pdf',
+      contenu_base64: cvToUse.contenu_base64 || serverCand?.cv?.contenu_base64,
+      url_stockage: cvToUse.url_stockage || serverCand?.cv?.url_stockage || '',
+      source_type: cvToUse.source_type,
+      est_genere: cvToUse.est_genere,
+      template_style: cvToUse.template_style,
+      cv_config: cvToUse.cv_config,
+    };
+
     const resolvedServerCand: Candidature | null = serverCand
       ? {
           ...serverCand,
+          cv_id: mergedCv.id,
+          cv: mergedCv,
           candidat: {
             ...(serverCand.candidat || candidatProfile),
             utilisateur_id: resolvedUserId,
@@ -985,8 +1242,8 @@ export default function AppRoot() {
       },
       offre_id: offreId,
       offre: targetOffre,
-      cv_id: cvToUse.id,
-      cv: cvToUse,
+      cv_id: mergedCv.id,
+      cv: mergedCv,
       lettre_motivation: '',
       message: '',
       statut: 'RECUE',
@@ -995,15 +1252,29 @@ export default function AppRoot() {
       notes_internes: [],
     };
 
+    // Sauvegarder le CV exact déposé par le candidat pour que le recruteur le voie tel quel
+    saveDepositedCvToStorage(
+      [
+        newCand.id,
+        mergedCv.id,
+        cvToUse.id,
+        `${newCand.candidat_id}_${offreId}`,
+        `${candidatProfile.id}_${offreId}`,
+        `${resolvedUserId}_${offreId}`,
+      ],
+      mergedCv
+    );
+
     setCandidatures((prev) => [newCand, ...prev.filter((c) => c.id !== newCand.id)]);
 
-    // Synchronisation immédiate des candidatures fraîches depuis MySQL
+    // Synchronisation immédiate des candidatures fraîches depuis MySQL en conservant les CV déposés
     api.getAllCandidatures().then((dbCands) => {
       if (dbCands && dbCands.length > 0) {
+        const hydrated = hydrateCandidaturesWithDepositedCvs(dbCands);
         setCandidatures((prev) => {
-          const dbIds = new Set(dbCands.map((c) => c.id));
+          const dbIds = new Set(hydrated.map((c) => c.id));
           const unsynced = prev.filter((c) => !dbIds.has(c.id));
-          return [...dbCands, ...unsynced];
+          return [...hydrated, ...unsynced];
         });
       }
     }).catch(() => {});
@@ -1055,32 +1326,81 @@ export default function AppRoot() {
     );
   };
 
-  // Recruiter Updates Status (Parcours C & RM4) -> Persistance MySQL
+  // Recruiter Updates Status (Parcours C & RM4) -> Persistance MySQL + Synchronisation temps réel
   const handleUpdateStatus = async (
     candId: string,
     newStatus: ApplicationStatus,
     commentaire?: string,
     entretienDetails?: { date?: string; type?: 'VISIO' | 'PRESENTIEL' | 'TELEPHONE'; lien?: string }
   ) => {
-    let targetCand: Candidature | undefined;
+    const existingCand =
+      candidatures.find((c) => c.id === candId) ||
+      (selectedCandidatureForDetail?.id === candId ? selectedCandidatureForDetail : undefined);
+
+    const prevStatut = existingCand?.statut || 'RECUE';
+    const { etapes_validees, etape_avant_decision } = computeSequentialSteps(
+      prevStatut,
+      existingCand?.etapes_validees,
+      newStatus
+    );
+
+    const updatedAt = new Date().toISOString().split('T')[0];
+    const resolvedComment =
+      commentaire !== undefined && commentaire.trim() !== ''
+        ? commentaire
+        : existingCand?.commentaire_recruteur;
+    const resolvedDateEntretien = entretienDetails?.date || existingCand?.date_entretien;
+    const resolvedTypeEntretien = entretienDetails?.type || existingCand?.type_entretien;
+    const resolvedLienEntretien = entretienDetails?.lien || existingCand?.lien_ou_lieu_entretien;
+
+    const decisionPayload: StoredDecision = {
+      statut: newStatus,
+      etapes_validees,
+      etape_avant_decision,
+      commentaire_recruteur: resolvedComment,
+      date_entretien: resolvedDateEntretien,
+      type_entretien: resolvedTypeEntretien,
+      lien_ou_lieu_entretien: resolvedLienEntretien,
+      updated_at: updatedAt,
+    };
+
+    const candUserIdForKey =
+      existingCand?.candidat?.utilisateur_id || existingCand?.candidat?.user?.id || '';
+    const candEmailForKey = (existingCand?.candidat?.user?.email || '').toLowerCase().trim();
+    const candFullNameForKey = `${existingCand?.candidat?.prenom || existingCand?.candidat?.user?.prenom || ''}_${existingCand?.candidat?.nom || existingCand?.candidat?.user?.nom || ''}`
+      .toLowerCase()
+      .trim();
+    const offreTitleForKey = (existingCand?.offre?.titre || '').toLowerCase().trim();
+    saveDecisionToStorage(
+      [
+        candId,
+        existingCand ? `${existingCand.candidat_id}_${existingCand.offre_id}` : '',
+        existingCand && candUserIdForKey ? `${candUserIdForKey}_${existingCand.offre_id}` : '',
+        existingCand && candEmailForKey ? `${candEmailForKey}_${existingCand.offre_id}` : '',
+        candEmailForKey && offreTitleForKey ? `${candEmailForKey}_${offreTitleForKey}` : '',
+        existingCand && candFullNameForKey ? `${candFullNameForKey}_${existingCand.offre_id}` : '',
+        candFullNameForKey && offreTitleForKey ? `${candFullNameForKey}_${offreTitleForKey}` : '',
+      ],
+      decisionPayload
+    );
 
     // Persistance dans la base de données MySQL
-    api.changerStatutCandidature(candId, newStatus, commentaire).catch(() => {});
+    api.changerStatutCandidature(candId, newStatus, resolvedComment).catch(() => {});
+
+    const targetCand: Candidature | undefined = existingCand
+      ? {
+          ...existingCand,
+          ...decisionPayload,
+        }
+      : undefined;
 
     setCandidatures((prev) =>
       prev.map((c) => {
         if (c.id === candId) {
-          const updated: Candidature = {
+          return {
             ...c,
-            statut: newStatus,
-            commentaire_recruteur: commentaire !== undefined ? commentaire : c.commentaire_recruteur,
-            date_entretien: entretienDetails?.date || c.date_entretien,
-            type_entretien: entretienDetails?.type || c.type_entretien,
-            lien_ou_lieu_entretien: entretienDetails?.lien || c.lien_ou_lieu_entretien,
-            updated_at: new Date().toISOString().split('T')[0],
+            ...decisionPayload,
           };
-          targetCand = updated;
-          return updated;
         }
         return c;
       })
@@ -1091,12 +1411,7 @@ export default function AppRoot() {
         prev
           ? {
               ...prev,
-              statut: newStatus,
-              commentaire_recruteur: commentaire !== undefined ? commentaire : prev.commentaire_recruteur,
-              date_entretien: entretienDetails?.date || prev.date_entretien,
-              type_entretien: entretienDetails?.type || prev.type_entretien,
-              lien_ou_lieu_entretien: entretienDetails?.lien || prev.lien_ou_lieu_entretien,
-              updated_at: new Date().toISOString().split('T')[0],
+              ...decisionPayload,
             }
           : null
       );
@@ -1121,12 +1436,83 @@ export default function AppRoot() {
       type: 'CHANGEMENT_STATUT',
       objet: `Mise à jour : ${targetCand?.offre?.titre || 'Votre candidature'}`,
       message: commentaire
-        ? `Votre candidature est passée à « ${statusLabels[newStatus] || newStatus} ». Message du recruteur : "${commentaire}"`
+        ? `Votre candidature est passée à « ${statusLabels[newStatus] || newStatus} ». Message de l'entreprise : "${commentaire}"`
         : `Votre candidature est passée à « ${statusLabels[newStatus] || newStatus} ».`,
       statut_envoi: 'ENVOYE',
       created_at: 'À l’instant',
     };
     setNotifications((prev) => [notif, ...prev]);
+
+    // Si le recruteur a écrit un message / commentaire au candidat, l'envoyer dans la discussion de l'entreprise
+    if (commentaire && commentaire.trim() && targetCand) {
+      const staticMockIds = ['conv-1', 'conv-2', 'conv-3', 'conv-4', 'conv-5'];
+      const candUserId = targetCand.candidat?.utilisateur_id || targetCand.candidat?.user?.id || targetCand.candidat_id;
+      const candFullName =
+        `${targetCand.candidat?.prenom || targetCand.candidat?.user?.prenom || ''} ${targetCand.candidat?.nom || targetCand.candidat?.user?.nom || ''}`.trim() ||
+        'Candidat';
+      const entName = targetCand.offre?.entreprise?.nom || 'Entreprise partenaire';
+      const entId = targetCand.offre?.entreprise_id || targetCand.offre?.entreprise?.id || 'c-alpha';
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const nowStr = `${now.toISOString().replace('T', ' ').substring(0, 10)} ${timeStr}`;
+
+      let conv = conversations.find(
+        (c) =>
+          !staticMockIds.includes(c.id) &&
+          (c.candidat_id === candUserId || c.candidat_nom.toLowerCase().trim() === candFullName.toLowerCase().trim()) &&
+          (c.offre_id === targetCand?.offre_id || c.entreprise_id === entId)
+      );
+
+      const convId = conv ? conv.id : `conv-${Date.now()}`;
+      if (!conv) {
+        const newConv: Conversation = {
+          id: convId,
+          candidat_id: candUserId,
+          candidat_nom: candFullName,
+          candidat_avatar: targetCand.candidat?.avatar_url || targetCand.candidat?.user?.avatar_url,
+          recruteur_id: currentUser?.id || 'u-rec-alpha',
+          recruteur_nom: entName,
+          entreprise_id: entId,
+          entreprise_nom: entName,
+          offre_id: targetCand.offre_id,
+          offre_titre: targetCand.offre?.titre || 'Candidature',
+          dernier_message: commentaire.trim(),
+          updated_at: nowStr,
+          non_lus_candidat: 1,
+          non_lus_recruteur: 0,
+        };
+        setConversations((prev) => [newConv, ...prev]);
+      } else {
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === convId
+              ? {
+                  ...c,
+                  entreprise_nom: entName,
+                  recruteur_nom: entName,
+                  dernier_message: commentaire.trim(),
+                  updated_at: nowStr,
+                  non_lus_candidat: (c.non_lus_candidat || 0) + 1,
+                }
+              : c
+          )
+        );
+      }
+
+      const newMsg: ChatMessage = {
+        id: `msg-${Date.now()}-rec`,
+        conversation_id: convId,
+        sender_id: currentUser?.id || 'u-rec-alpha',
+        sender_role: 'RECRUTEUR',
+        sender_name: entName,
+        receiver_id: candUserId,
+        receiver_name: candFullName,
+        contenu: commentaire.trim(),
+        created_at: nowStr,
+        lu: false,
+      };
+      setMessages((prev) => [...prev, newMsg]);
+    }
   };
 
   // Recruiter Adds Internal Note (Module 8.4)
@@ -1340,9 +1726,25 @@ export default function AppRoot() {
     });
   }, [candidatures, currentUser, candidatProfile]);
 
+  const hydratedCandidateApplications = useMemo(
+    () => hydrateCandidaturesWithDepositedCvs(candidateApplications),
+    [candidateApplications]
+  );
+
   // Candidate applications IDs for RM2 check
   const candidateApplicationOfferIds = useMemo(() => {
     return candidateApplications.map((c) => c.offre_id);
+  }, [candidateApplications]);
+
+  // Nombre d'entretiens et convocations pour le badge de la barre verticale
+  const candidateEntretiensCount = useMemo(() => {
+    return candidateApplications.filter(
+      (c) =>
+        c.statut === 'PRESELECTIONNEE' ||
+        c.statut === 'ENTRETIEN' ||
+        c.statut === 'ACCEPTEE' ||
+        Boolean(c.date_entretien)
+    ).length;
   }, [candidateApplications]);
 
   if (!isMounted) {
@@ -1392,6 +1794,7 @@ export default function AppRoot() {
           favorisCount={favorisOffresIds.length}
           unreadMessagesCount={totalUnreadMessages}
           offresCount={offres.filter((o) => o.statut === 'PUBLIEE').length}
+          entretiensCount={candidateEntretiensCount}
         />
         {/* Main Screen Router according to Section 5 Aperçu des interfaces */}
         <main className="min-w-0 flex-1 pb-16 lg:ml-64">
@@ -1410,6 +1813,11 @@ export default function AppRoot() {
               favorisOffresIds={favorisOffresIds}
               onToggleFavori={handleToggleFavori}
               onContactRecruiter={handleContactRecruiter}
+              initialSelectedOffre={activeScreen === 'E3' ? selectedOffreForDetail : null}
+              onClearSelectedOffre={() => {
+                setSelectedOffreForDetail(null);
+                handleNavigate('E1');
+              }}
             />
           )}
 
@@ -1418,7 +1826,7 @@ export default function AppRoot() {
             <DashboardCandidatView
               currentUser={currentUser}
               candidat={candidatProfile}
-              candidatures={candidateApplications}
+              candidatures={hydratedCandidateApplications}
               offres={offres}
               favorisOffresIds={favorisOffresIds}
               conversations={conversations}
@@ -1435,8 +1843,21 @@ export default function AppRoot() {
           {/* E5 : Mes Candidatures (Espace Candidat Protégé) */}
           {activeScreen === 'E5' && currentUser && (
             <MesCandidaturesView
-              candidatures={candidateApplications}
+              candidatures={hydratedCandidateApplications}
               onWithdrawApplication={handleWithdrawApplication}
+              onNavigateScreen={handleNavigate}
+              onViewJobDetail={(o) => {
+                setSelectedOffreForDetail(o);
+                handleNavigate('E3');
+              }}
+            />
+          )}
+
+          {/* E_ENTRETIENS : Entretiens & Convocations (Espace Candidat Protégé) */}
+          {activeScreen === 'E_ENTRETIENS' && currentUser && (
+            <EntretiensCandidatView
+              candidatures={hydratedCandidateApplications}
+              onNavigateScreen={handleNavigate}
               onViewJobDetail={(o) => {
                 setSelectedOffreForDetail(o);
                 handleNavigate('E3');
@@ -1465,16 +1886,36 @@ export default function AppRoot() {
             <MesCvsView
               candidat={candidatProfile}
               onNavigateToProfile={() => handleNavigate('E6_PROFIL')}
-              onUpdateCvList={(newCvs) => setCandidatProfile((prev) => ({ ...prev, cvs: newCvs }))}
+              onUpdateCvList={(newCvs) => {
+                newCvs.forEach((c) => saveDepositedCvToStorage([c.id], c));
+                setCandidatProfile((prev) => ({ ...prev, cvs: newCvs }));
+              }}
               onUpdateCandidatProfile={handleUpdateCandidatProfile}
               onUploadCv={async (file: File) => {
+                const { base64, dataUrl } = await readFileAsBase64(file);
                 const formData = new FormData();
                 formData.append('cv_file', file);
                 const upload = await api.uploadCv(formData);
-                if (!upload.success || !upload.data) {
-                  return { error: upload.error?.message || 'Échec du téléversement du CV.' };
-                }
-                const newCv = upload.data!;
+                const newCv: import('@/lib/types').CV =
+                  upload.success && upload.data
+                    ? {
+                        ...upload.data,
+                        url_stockage: dataUrl || upload.data.url_stockage,
+                        contenu_base64: base64 || upload.data.contenu_base64,
+                        source_type: 'FICHIER_LOCAL',
+                      }
+                    : {
+                        id: `cv-upload-${Date.now()}`,
+                        candidat_id: candidatProfile.id,
+                        nom_fichier: file.name,
+                        type_mime: file.type || 'application/pdf',
+                        taille_octets: file.size,
+                        url_stockage: dataUrl || URL.createObjectURL(file),
+                        contenu_base64: base64,
+                        created_at: new Date().toISOString().split('T')[0],
+                        source_type: 'FICHIER_LOCAL',
+                      };
+                saveDepositedCvToStorage([newCv.id], newCv);
                 setCandidatProfile((prev) => ({
                   ...prev,
                   cvs: [newCv, ...(prev.cvs || [])],
@@ -2042,7 +2483,7 @@ export default function AppRoot() {
 
             // Synchronisation immédiate des candidatures MySQL pour le candidat
             api.getAllCandidatures().then((dbCands) => {
-              if (dbCands && dbCands.length > 0) setCandidatures(dbCands);
+              if (dbCands && dbCands.length > 0) setCandidatures(hydrateCandidaturesWithDepositedCvs(dbCands));
             }).catch(() => {});
           }
 

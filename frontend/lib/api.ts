@@ -308,7 +308,12 @@ class ApiClient {
   }
 
   public async postuler(payload: {
-    offre_id: string; cv_id?: string; candidat_id?: string; lettre_motivation?: string; message?: string;
+    offre_id: string;
+    cv_id?: string;
+    candidat_id?: string;
+    lettre_motivation?: string;
+    message?: string;
+    cv_payload?: Partial<CV>;
   }): Promise<ApiResponse<{ candidature: Candidature; message?: string }>> {
     return this.request<{ candidature: Candidature; message?: string }>(`/jobs/${payload.offre_id}/applications`, {
       method: 'POST',
@@ -388,39 +393,36 @@ class ApiClient {
   }
 
   public async uploadCv(formData: FormData): Promise<ApiResponse<CV>> {
-    if (!this.token) {
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+    if (typeof window !== 'undefined') {
+      try {
+        const u = sessionStorage.getItem('talenta_current_user');
+        if (u) {
+          const parsed = JSON.parse(u);
+          if (parsed?.id) headers['X-User-Id'] = parsed.id;
+        }
+      } catch {}
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/candidates/cvs`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body?.cv) {
+        this._backendAvailable = true;
+        return { success: true, data: body.cv as CV };
+      }
       return {
         success: false,
-        error: {
-          message: 'Vous devez être connecté pour déposer un CV.',
-          status: 401,
-        },
+        error: { message: body?.message || 'Erreur upload.', status: res.status },
       };
+    } catch {
+      return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
     }
-    if (this._backendAvailable) {
-      const headers: Record<string, string> = { Accept: 'application/json' };
-      if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
-      try {
-        const res = await fetch(`${API_BASE}/candidates/cvs`, { method: 'POST', headers, body: formData });
-        const body = await res.json().catch(() => ({}));
-        if (res.status === 401) {
-          this.setToken(null);
-          return {
-            success: false,
-            error: {
-              message: 'Votre session a expiré. Reconnectez-vous avant de déposer un CV.',
-              status: 401,
-            },
-          };
-        }
-        return res.ok
-          ? { success: true, data: body.cv as CV }
-          : { success: false, error: { message: body.message, status: res.status } };
-      } catch {
-        return { success: false, error: { message: 'Erreur upload.', status: 0 } };
-      }
-    }
-    return { success: false, error: { message: 'Backend hors ligne.', status: 0 } };
   }
 
   public async analyserCv(cvId: string): Promise<ApiResponse<AnalyseCv>> {

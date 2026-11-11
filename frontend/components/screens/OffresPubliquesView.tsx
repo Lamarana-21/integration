@@ -1,15 +1,17 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
+  ArrowRight,
   BriefcaseBusiness,
   Building2,
   Calendar,
   CheckCircle2,
   ChevronLeft,
-  ChevronRight,
   Clock,
+  ExternalLink,
   Filter,
+  Globe,
   Heart,
   MapPin,
   MessageSquare,
@@ -38,6 +40,8 @@ interface OffresPubliquesViewProps {
   favorisOffresIds?: string[];
   onToggleFavori?: (offreId: string) => void;
   onContactRecruiter?: (offre: Offre) => void;
+  initialSelectedOffre?: Offre | null;
+  onClearSelectedOffre?: () => void;
 }
 
 export function OffresPubliquesView({
@@ -50,17 +54,28 @@ export function OffresPubliquesView({
   favorisOffresIds = [],
   onToggleFavori,
   onContactRecruiter,
+  initialSelectedOffre = null,
+  onClearSelectedOffre,
 }: OffresPubliquesViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [villeFilter, setVilleFilter] = useState('');
   const [contratsSelected, setContratsSelected] = useState<ContractType[]>([]);
   const [dateFilter, setDateFilter] = useState<'all' | '24h' | '7j'>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'titre'>('recent');
-  const [selectedJob, setSelectedJob] = useState<Offre | null>(null);
+  const [selectedJob, setSelectedJob] = useState<Offre | null>(initialSelectedOffre);
 
-  // Filtrage selon le rôle (les visiteurs et candidats voient les offres PUBLIEES)
+  useEffect(() => {
+    if (initialSelectedOffre) {
+      setSelectedJob(initialSelectedOffre);
+    }
+  }, [initialSelectedOffre]);
+
+  const publishedOffres = useMemo(() => {
+    return offres.filter((o) => o.statut === 'PUBLIEE' && !isOfferExpired(o.date_limite));
+  }, [offres]);
+
   const filteredOffres = useMemo(() => {
-    return offres.filter((offre) => {
+    const list = offres.filter((offre) => {
       if (currentRole === 'VISITEUR' || currentRole === 'CANDIDAT') {
         if (offre.statut !== 'PUBLIEE') return false;
       }
@@ -68,9 +83,9 @@ export function OffresPubliquesView({
       if (searchTerm) {
         const q = searchTerm.toLowerCase();
         const matchTitle = offre.titre.toLowerCase().includes(q);
-        const matchCompany = offre.entreprise?.nom.toLowerCase().includes(q);
-        const matchDesc = offre.description.toLowerCase().includes(q);
-        const matchSkills = offre.competences_requises.some((c) =>
+        const matchCompany = offre.entreprise?.nom?.toLowerCase().includes(q);
+        const matchDesc = offre.description?.toLowerCase().includes(q);
+        const matchSkills = offre.competences_requises?.some((c) =>
           c.toLowerCase().includes(q)
         );
         if (!matchTitle && !matchCompany && !matchDesc && !matchSkills) return false;
@@ -86,7 +101,12 @@ export function OffresPubliquesView({
 
       return true;
     });
-  }, [offres, currentRole, searchTerm, villeFilter, contratsSelected]);
+
+    return [...list].sort((a, b) => {
+      if (sortBy === 'titre') return a.titre.localeCompare(b.titre);
+      return (b.date_publication || '').localeCompare(a.date_publication || '');
+    });
+  }, [offres, currentRole, searchTerm, villeFilter, contratsSelected, sortBy]);
 
   const toggleContract = (type: ContractType) => {
     setContratsSelected((prev) =>
@@ -101,92 +121,117 @@ export function OffresPubliquesView({
     setDateFilter('all');
   };
 
-  // If a job is selected for detail view (E3)
+  const openJobDetail = (offre: Offre) => {
+    setSelectedJob(offre);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const closeJobDetail = () => {
+    setSelectedJob(null);
+    if (onClearSelectedOffre) onClearSelectedOffre();
+  };
+
+  // ============================================================================
+  // DÉTAILS D'UNE OFFRE (E3) — PROPRE, STRUCTURÉ ET PROFESSIONNEL
+  // ============================================================================
   if (selectedJob) {
     const hasApplied = hasCandidateAppliedToJob(selectedJob.id, candidatureOffreIds);
     const isClosed = selectedJob.statut === 'CLOTUREE' || isOfferExpired(selectedJob.date_limite);
+    const isFav = isJobFavorited(selectedJob.id, favorisOffresIds);
 
     return (
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 space-y-6">
         <button
-          onClick={() => setSelectedJob(null)}
-          className="mb-6 flex items-center gap-2 text-xs font-bold text-[#5c4ce0] hover:underline"
+          onClick={closeJobDetail}
+          className="inline-flex items-center gap-2 text-xs font-bold text-[#594be0] hover:underline"
         >
           <ChevronLeft size={16} /> Retour aux offres
         </button>
 
-        {/* E3 Header */}
+        {/* En-tête de l'offre */}
         <div className="rounded-3xl border border-[#e7eaf2] bg-white p-6 sm:p-8 shadow-xs">
           <div className="flex flex-col justify-between gap-6 md:flex-row md:items-center">
-            <div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="rounded-md bg-[#eeeaff] px-2.5 py-0.5 text-xs font-extrabold text-[#594be0]">
-                  {selectedJob.type_contrat}
-                </span>
-                <span
-                  className={`rounded-md px-2.5 py-0.5 text-xs font-bold ${
-                    isClosed
-                      ? 'bg-[#fef2f2] text-[#dc2626] border border-[#fecaca]'
-                      : 'bg-[#eef8f2] text-[#2d9a62]'
-                  }`}
-                >
-                  {isClosed ? 'CLÔTURÉE' : selectedJob.statut}
-                </span>
-                {hasApplied && (
-                  <span className="rounded-md bg-[#e8f7ee] border border-[#a7f3d0] px-2.5 py-0.5 text-xs font-extrabold text-[#2a955e]">
-                    ✓ Candidature envoyée
-                  </span>
-                )}
+            <div className="flex items-start gap-4">
+              <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-[#f0efff] text-lg font-black text-[#594be0]">
+                {selectedJob.entreprise?.nom?.substring(0, 2).toUpperCase() || 'EN'}
               </div>
-              <h1 className="mt-3 text-2xl font-black tracking-tight text-[#171f33] sm:text-3xl">
-                {selectedJob.titre}
-              </h1>
-              <div className="mt-2.5 flex flex-wrap items-center gap-4 text-xs font-medium text-[#727a90]">
-                <span className="flex items-center gap-1 font-semibold text-[#1e2538]">
-                  <Building2 size={15} className="text-[#6458e8]" />
-                  {selectedJob.entreprise?.nom}
-                </span>
-                <span className="flex items-center gap-1">
-                  <MapPin size={15} /> {selectedJob.lieu}
-                </span>
-                {selectedJob.date_publication && (
-                  <span className="flex items-center gap-1 text-[#475569]">
-                    <Calendar size={15} className="text-[#594be0]" /> Publiée le : <strong className="text-[#0f172a]">{formatFrenchDate(selectedJob.date_publication)}</strong>
+
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-md bg-[#eeeaff] px-2.5 py-0.5 text-xs font-extrabold text-[#594be0]">
+                    {selectedJob.type_contrat}
                   </span>
-                )}
-                {selectedJob.date_limite && (
-                  <span className={`flex items-center gap-1 ${isClosed ? 'text-[#dc2626] font-bold' : 'text-[#475569]'}`}>
-                    <Clock size={15} className={isClosed ? 'text-[#dc2626]' : 'text-[#594be0]'} /> Date limite : <strong className={isClosed ? 'text-[#dc2626]' : 'text-[#0f172a]'}>{formatFrenchDate(selectedJob.date_limite)}</strong>
+                  <span
+                    className={`rounded-md px-2.5 py-0.5 text-xs font-bold ${
+                      isClosed
+                        ? 'bg-[#fef2f2] text-[#dc2626] border border-[#fecaca]'
+                        : 'bg-[#eef8f2] text-[#2d9a62]'
+                    }`}
+                  >
+                    {isClosed ? 'CLÔTURÉE' : 'ACTIVE'}
                   </span>
-                )}
+                  {selectedJob.salaire && (
+                    <span className="rounded-md bg-[#f8f9fc] border border-[#e5e8f0] px-2.5 py-0.5 text-xs font-bold text-[#171f33]">
+                      {selectedJob.salaire}
+                    </span>
+                  )}
+                  {hasApplied && (
+                    <span className="rounded-md bg-[#e8f7ee] border border-[#a7f3d0] px-2.5 py-0.5 text-xs font-extrabold text-[#2a955e]">
+                      ✓ Candidature envoyée
+                    </span>
+                  )}
+                </div>
+
+                <h1 className="mt-2.5 text-2xl font-black tracking-tight text-[#171f33] sm:text-3xl">
+                  {selectedJob.titre}
+                </h1>
+
+                <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-[#727a90]">
+                  <span className="flex items-center gap-1.5 font-bold text-[#1e2538]">
+                    <Building2 size={14} className="text-[#594be0]" />
+                    {selectedJob.entreprise?.nom}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <MapPin size={14} /> {selectedJob.lieu}
+                  </span>
+                  {selectedJob.date_publication && (
+                    <span className="flex items-center gap-1">
+                      <Calendar size={14} className="text-[#594be0]" /> Publiée le{' '}
+                      <strong className="text-[#171f33]">
+                        {formatFrenchDate(selectedJob.date_publication)}
+                      </strong>
+                    </span>
+                  )}
+                  {selectedJob.date_limite && (
+                    <span
+                      className={`flex items-center gap-1 ${
+                        isClosed ? 'text-[#dc2626] font-bold' : ''
+                      }`}
+                    >
+                      <Clock size={14} className={isClosed ? 'text-[#dc2626]' : 'text-[#594be0]'} />{' '}
+                      Date limite :{' '}
+                      <strong className={isClosed ? 'text-[#dc2626]' : 'text-[#171f33]'}>
+                        {formatFrenchDate(selectedJob.date_limite)}
+                      </strong>
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Action button states */}
+            {/* Actions */}
             <div className="flex flex-wrap items-center gap-2.5">
               {onToggleFavori && (
                 <button
                   type="button"
                   onClick={() => onToggleFavori(selectedJob.id)}
-                  className={`grid size-11 place-items-center rounded-2xl border transition shadow-xs ${
-                    isJobFavorited(selectedJob.id, favorisOffresIds)
+                  className={`grid size-11 place-items-center rounded-2xl border transition ${
+                    isFav
                       ? 'border-[#fecdd3] bg-[#fff1f2] text-[#e11d48]'
                       : 'border-[#e2e5ef] bg-white text-[#788299] hover:text-[#e11d48] hover:bg-[#fff1f2]'
                   }`}
-                  title={
-                    !currentUser
-                      ? 'Connectez-vous pour ajouter aux favoris'
-                      : isJobFavorited(selectedJob.id, favorisOffresIds)
-                      ? 'Retirer des favoris'
-                      : 'Ajouter aux favoris'
-                  }
                 >
-                  <Heart
-                    size={18}
-                    className={
-                      isJobFavorited(selectedJob.id, favorisOffresIds) ? 'fill-[#e11d48]' : ''
-                    }
-                  />
+                  <Heart size={18} className={isFav ? 'fill-[#e11d48]' : ''} />
                 </button>
               )}
 
@@ -194,10 +239,10 @@ export function OffresPubliquesView({
                 <button
                   type="button"
                   onClick={() => onContactRecruiter(selectedJob)}
-                  className="flex items-center gap-2 rounded-2xl border border-[#d8d4fa] bg-[#faf9fe] px-4 py-3 text-xs font-bold text-[#5547d7] shadow-xs hover:bg-[#f1edfe] transition"
+                  className="flex items-center gap-2 rounded-2xl border border-[#d8d4fa] bg-[#faf9fe] px-4 py-3 text-xs font-bold text-[#5547d7] hover:bg-[#f1edfe] transition"
                 >
-                  <MessageSquare size={16} />
-                  <span>Contacter le recruteur</span>
+                  <MessageSquare size={15} />
+                  <span>Contacter l'entreprise</span>
                 </button>
               )}
 
@@ -205,32 +250,32 @@ export function OffresPubliquesView({
                 isClosed ? (
                   <button
                     disabled
-                    className="cursor-not-allowed rounded-2xl bg-[#e3e6ee] px-6 py-3.5 text-xs font-bold text-[#8890a4]"
+                    className="cursor-not-allowed rounded-2xl bg-[#e3e6ee] px-6 py-3 text-xs font-bold text-[#8890a4]"
                   >
-                    Candidatures closes (Date limite dépassée)
+                    Candidatures closes
                   </button>
                 ) : (
                   <button
                     onClick={() => onPostuler(selectedJob)}
-                    className="rounded-2xl bg-[#594be0] px-6 py-3.5 text-xs font-bold text-white shadow-md hover:bg-[#483ad3]"
+                    className="rounded-2xl bg-[#594be0] px-6 py-3 text-xs font-bold text-white shadow-sm hover:bg-[#483ad3]"
                   >
                     Se connecter pour postuler
                   </button>
                 )
               ) : isClosed ? (
-                <div className="flex items-center gap-2 rounded-2xl bg-[#fef2f2] px-5 py-3 text-xs font-bold text-[#991b1b] border border-[#fecaca]">
-                  <Clock size={16} />
-                  <span>Candidatures closes (Date limite dépassée)</span>
+                <div className="flex items-center gap-2 rounded-2xl bg-[#fef2f2] px-4 py-3 text-xs font-bold text-[#991b1b] border border-[#fecaca]">
+                  <Clock size={15} />
+                  <span>Candidatures closes</span>
                 </div>
               ) : hasApplied ? (
-                <div className="flex items-center gap-2 rounded-2xl bg-[#edf9f3] px-5 py-3 text-xs font-bold text-[#2b965f] border border-[#cbeedc]">
-                  <CheckCircle2 size={17} />
+                <div className="flex items-center gap-2 rounded-2xl bg-[#edf9f3] px-4 py-3 text-xs font-bold text-[#2b965f] border border-[#cbeedc]">
+                  <CheckCircle2 size={16} />
                   <span>Candidature déjà envoyée</span>
                 </div>
               ) : (
                 <button
                   onClick={() => onPostuler(selectedJob)}
-                  className="rounded-2xl bg-[#594be0] px-7 py-3.5 text-xs font-extrabold text-white shadow-md shadow-[#594be0]/20 hover:bg-[#4739d2] transition"
+                  className="rounded-2xl bg-[#594be0] px-6 py-3 text-xs font-extrabold text-white shadow-sm hover:bg-[#4739d2] transition"
                 >
                   Postuler à cette offre
                 </button>
@@ -239,8 +284,8 @@ export function OffresPubliquesView({
           </div>
         </div>
 
-        {/* E3 Body Content */}
-        <div className="mt-6 grid gap-6 md:grid-cols-[2fr_1fr]">
+        {/* Contenu principal en 2 colonnes */}
+        <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
           <div className="space-y-6">
             <section className="rounded-3xl border border-[#e7eaf2] bg-white p-6 sm:p-7 shadow-xs">
               <h2 className="text-base font-extrabold text-[#192033]">
@@ -253,7 +298,9 @@ export function OffresPubliquesView({
 
             {selectedJob.missions && (
               <section className="rounded-3xl border border-[#e7eaf2] bg-white p-6 sm:p-7 shadow-xs">
-                <h2 className="text-base font-extrabold text-[#192033]">Missions</h2>
+                <h2 className="text-base font-extrabold text-[#192033]">
+                  Missions principales
+                </h2>
                 <div className="mt-3 text-xs leading-6 text-[#5a6277] whitespace-pre-line">
                   {selectedJob.missions}
                 </div>
@@ -262,7 +309,7 @@ export function OffresPubliquesView({
 
             <section className="rounded-3xl border border-[#e7eaf2] bg-white p-6 sm:p-7 shadow-xs">
               <h2 className="text-base font-extrabold text-[#192033]">
-                Compétences requises
+                Compétences attendues
               </h2>
               <div className="mt-3 flex flex-wrap gap-2">
                 {selectedJob.competences_requises.map((c) => (
@@ -277,7 +324,7 @@ export function OffresPubliquesView({
             </section>
           </div>
 
-          {/* Right Sidebar: About Company */}
+          {/* À propos de l'entreprise */}
           <div className="space-y-6">
             <div className="rounded-3xl border border-[#e7eaf2] bg-white p-6 shadow-xs">
               <h3 className="text-xs font-bold tracking-wider text-[#9ba3b8] uppercase">
@@ -301,10 +348,13 @@ export function OffresPubliquesView({
                 {selectedJob.entreprise?.description}
               </p>
 
-              <div className="mt-4 border-t border-[#f0f2f7] pt-4 text-xs">
-                <div className="text-[#848ea4]">Localisation</div>
-                <div className="font-bold text-[#1f2639]">
-                  {selectedJob.entreprise?.ville}, {selectedJob.entreprise?.pays}
+              <div className="mt-4 border-t border-[#f0f2f7] pt-4 text-xs space-y-2">
+                <div>
+                  <div className="text-[#848ea4]">Localisation</div>
+                  <div className="font-bold text-[#1f2639]">
+                    {selectedJob.entreprise?.ville || selectedJob.lieu},{' '}
+                    {selectedJob.entreprise?.pays || 'Tunisie'}
+                  </div>
                 </div>
               </div>
 
@@ -313,20 +363,11 @@ export function OffresPubliquesView({
                   href={selectedJob.entreprise.site_web}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-4 inline-block text-xs font-bold text-[#594be0] hover:underline"
+                  className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-[#594be0] hover:underline"
                 >
-                  Visiter le site web →
+                  <Globe size={13} /> Visiter le site web <ExternalLink size={11} />
                 </a>
               )}
-            </div>
-
-            <div className="rounded-3xl border border-[#dcd8fd] bg-gradient-to-br from-[#f4f2ff] to-[#ece9ff] p-6">
-              <div className="flex items-center gap-2 text-xs font-black text-[#5648d7]">
-                <Sparkles size={16} /> Analyse IA Talenta
-              </div>
-              <p className="mt-2 text-[11px] leading-5 text-[#6c698c]">
-                Dès l'envoi de votre candidature, notre IA extrait automatiquement vos compétences clés pour aider le recruteur à pré-qualifier votre profil.
-              </p>
             </div>
           </div>
         </div>
@@ -334,25 +375,71 @@ export function OffresPubliquesView({
     );
   }
 
-  // E1 : Main Search View
+  // ============================================================================
+  // PAGE PRINCIPALE DES OFFRES (E1) — SIMPLE, PROPRE ET SANS ENCOMBREMENT
+  // ============================================================================
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      {/* Hero Banner */}
-      <div className="rounded-3xl bg-gradient-to-r from-[#5a4ce2] via-[#6557e9] to-[#4837cb] p-6 sm:p-10 text-white shadow-xl">
-        <div className="max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-bold backdrop-blur-md">
-            <Sparkles size={14} /> Plateforme Intelligente de Recrutement
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 space-y-6">
+      {/* Barre défilante sobre et propre des nouvelles offres */}
+      {publishedOffres.length > 0 && (
+        <div className="overflow-hidden rounded-2xl border border-[#e4e7f2] bg-white shadow-2xs">
+          <div className="flex items-center">
+            <div className="flex shrink-0 items-center gap-2 bg-[#f4f2ff] border-r border-[#e4e0ff] px-4 py-2.5 text-xs font-bold text-[#594be0]">
+              <span className="size-2 rounded-full bg-[#10b981] animate-pulse" />
+              <span>Nouvelles offres</span>
+            </div>
+
+            <div className="flex-1 overflow-hidden py-2 px-4">
+              <div
+                className="flex items-center gap-8 whitespace-nowrap"
+                style={{ animation: 'simpleMarquee 34s linear infinite' }}
+              >
+                {[...publishedOffres, ...publishedOffres].map((offre, i) => (
+                  <button
+                    key={`${offre.id}-${i}`}
+                    type="button"
+                    onClick={() => openJobDetail(offre)}
+                    className="inline-flex items-center gap-2 text-xs text-[#3b4356] hover:text-[#594be0] transition cursor-pointer"
+                  >
+                    <span className="rounded bg-[#f0efff] px-2 py-0.5 text-[10px] font-bold text-[#594be0]">
+                      {offre.type_contrat}
+                    </span>
+                    <span className="font-bold text-[#171f33]">{offre.titre}</span>
+                    <span className="text-[#7c859c]">
+                      — {offre.entreprise?.nom} ({offre.lieu})
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-          <h1 className="mt-3 text-2xl font-black tracking-tight sm:text-4xl">
-            Trouvez le poste qui correspond à votre talent
+
+          <style jsx>{`
+            @keyframes simpleMarquee {
+              0% {
+                transform: translateX(0%);
+              }
+              100% {
+                transform: translateX(-50%);
+              }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* Bannière de recherche épurée (sans statistiques) */}
+      <div className="rounded-3xl bg-gradient-to-r from-[#5a4ce2] via-[#6557e9] to-[#4837cb] p-6 sm:p-8 text-white shadow-md">
+        <div className="max-w-2xl">
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
+            Offres d'emploi disponibles
           </h1>
-          <p className="mt-2 text-xs sm:text-sm text-white/80">
-            Offres d'emploi vérifiées, suivi transparent de candidature et analyse de CV assistée par intelligence artificielle.
+          <p className="mt-1.5 text-xs sm:text-sm text-white/85">
+            Recherchez un poste par métier, compétence ou ville et postulez directement en ligne.
           </p>
         </div>
 
-        {/* Search Bar Inputs (E1) */}
-        <div className="mt-8 grid gap-2 rounded-2xl bg-white p-2.5 shadow-xl sm:grid-cols-[1.5fr_1fr_1fr_auto]">
+        {/* Barre de recherche */}
+        <div className="mt-6 grid gap-2 rounded-2xl bg-white p-2 shadow-lg sm:grid-cols-[1.5fr_1fr_1fr_auto]">
           <div className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-[#20273a] bg-[#f8f9fc]">
             <Search size={16} className="text-[#9ea6bb]" />
             <input
@@ -368,7 +455,7 @@ export function OffresPubliquesView({
             <MapPin size={16} className="text-[#9ea6bb]" />
             <input
               type="text"
-              placeholder="Ville (ex: Sfax, Tunis)"
+              placeholder="Ville (ex: Tunis, Sfax)"
               value={villeFilter ?? ''}
               onChange={(e) => setVilleFilter(e.target.value)}
               className="w-full bg-transparent outline-none placeholder:text-[#9ea6bb]"
@@ -378,13 +465,12 @@ export function OffresPubliquesView({
           <div className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-[#20273a] bg-[#f8f9fc]">
             <BriefcaseBusiness size={16} className="text-[#9ea6bb]" />
             <select
+              value={contratsSelected[0] || ''}
               onChange={(e) => {
                 const val = e.target.value as ContractType;
-                if (val && !contratsSelected.includes(val)) {
-                  setContratsSelected([...contratsSelected, val]);
-                }
+                if (!val) setContratsSelected([]);
+                else setContratsSelected([val]);
               }}
-              defaultValue=""
               className="w-full bg-transparent outline-none text-[#5e667d]"
             >
               <option value="">Tous types de contrat</option>
@@ -397,17 +483,16 @@ export function OffresPubliquesView({
           </div>
 
           <button
-            onClick={() => {}}
-            className="rounded-xl bg-[#594be0] px-6 py-3 text-xs font-bold text-white shadow-md hover:bg-[#483ad3] transition"
+            type="button"
+            className="rounded-xl bg-[#594be0] px-6 py-2.5 text-xs font-bold text-white hover:bg-[#483ad3] transition"
           >
             Rechercher
           </button>
         </div>
       </div>
 
-      {/* Main Grid: Left Filters + Right List (E1) */}
-      <div className="mt-8 grid gap-8 lg:grid-cols-[280px_1fr]">
-        {/* Left Filters Sidebar */}
+      {/* Grille : Filtres à gauche + Liste épurée à droite */}
+      <div className="grid gap-7 lg:grid-cols-[260px_1fr]">
         <aside className="space-y-6 rounded-3xl border border-[#e8ebf3] bg-white p-6 shadow-xs h-fit">
           <div className="flex items-center justify-between border-b border-[#f0f2f7] pb-3">
             <div className="flex items-center gap-2 text-xs font-extrabold text-[#1a2235]">
@@ -423,7 +508,6 @@ export function OffresPubliquesView({
             )}
           </div>
 
-          {/* Contrats */}
           <div>
             <div className="text-xs font-bold text-[#1f273b]">Type de contrat</div>
             <div className="mt-2.5 space-y-2">
@@ -446,7 +530,6 @@ export function OffresPubliquesView({
             </div>
           </div>
 
-          {/* Date de publication */}
           <div>
             <div className="text-xs font-bold text-[#1f273b]">Date de publication</div>
             <div className="mt-2.5 space-y-2 text-xs text-[#525a70]">
@@ -484,14 +567,13 @@ export function OffresPubliquesView({
           </div>
         </aside>
 
-        {/* Right Job Cards List */}
         <div>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="text-xs font-bold text-[#717a91]">
               <span className="text-[#192135] font-black text-sm">
                 {filteredOffres.length}
               </span>{' '}
-              offre(s) correspondante(s)
+              offre(s) disponible(s)
             </div>
 
             <div className="flex items-center gap-2 text-xs text-[#6e778d]">
@@ -507,16 +589,12 @@ export function OffresPubliquesView({
             </div>
           </div>
 
-          {/* Empty state */}
           {filteredOffres.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-[#d8dce8] bg-white p-12 text-center">
               <BriefcaseBusiness size={40} className="mx-auto text-[#adb6cb]" />
               <h3 className="mt-3 text-base font-bold text-[#1f273b]">
                 Aucune offre ne correspond à vos critères
               </h3>
-              <p className="mt-1 text-xs text-[#7d869d]">
-                Essayez d'élargir vos filtres ou de modifier vos mots-clés de recherche.
-              </p>
               <button
                 onClick={resetFilters}
                 className="mt-4 rounded-xl bg-[#efedff] px-4 py-2 text-xs font-bold text-[#5748de] hover:bg-[#e4e0ff]"
@@ -533,7 +611,8 @@ export function OffresPubliquesView({
                 return (
                   <div
                     key={offre.id}
-                    className="group rounded-3xl border border-[#e6e9f2] bg-white p-6 shadow-xs transition hover:border-[#b8aefb] hover:shadow-md"
+                    onClick={() => openJobDetail(offre)}
+                    className="group cursor-pointer rounded-3xl border border-[#e6e9f2] bg-white p-6 shadow-xs transition hover:border-[#b8aefb] hover:shadow-md"
                   >
                     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                       <div className="space-y-2">
@@ -545,23 +624,13 @@ export function OffresPubliquesView({
                             {offre.entreprise?.nom}
                           </span>
                           <span className="text-xs text-[#8790a6]">· {offre.lieu}</span>
-                          {offre.date_publication && (
-                            <span className="flex items-center gap-1 text-[11px] text-[#717a90]">
-                              <Calendar size={12} className="text-[#594be0]" />
-                              Publiée le {formatFrenchDate(offre.date_publication)}
-                            </span>
-                          )}
                           {offre.date_limite && (
-                            <span className={`flex items-center gap-1 text-[11px] ${
-                              isExpired ? 'font-bold text-[#dc2626]' : 'text-[#717a90]'
-                            }`}>
-                              <Clock size={12} className={isExpired ? 'text-[#dc2626]' : 'text-[#594be0]'} />
-                              Date limite : {formatFrenchDate(offre.date_limite)}
-                            </span>
-                          )}
-                          {isExpired && (
-                            <span className="rounded-full bg-[#fef2f2] border border-[#fecaca] px-2 py-0.5 text-[10px] font-extrabold text-[#dc2626]">
-                              Candidatures closes
+                            <span
+                              className={`flex items-center gap-1 text-[11px] ${
+                                isExpired ? 'font-bold text-[#dc2626]' : 'text-[#717a90]'
+                              }`}
+                            >
+                              · Date limite : {formatFrenchDate(offre.date_limite)}
                             </span>
                           )}
                           {hasApplied && (
@@ -583,7 +652,7 @@ export function OffresPubliquesView({
                           {offre.competences_requises.slice(0, 4).map((comp) => (
                             <span
                               key={comp}
-                              className="rounded-lg bg-[#f4f5f9] px-2 py-0.5 text-[11px] font-medium text-[#4f566c]"
+                              className="rounded-lg bg-[#f4f5f9] px-2.5 py-0.5 text-[11px] font-medium text-[#4f566c]"
                             >
                               {comp}
                             </span>
@@ -591,7 +660,10 @@ export function OffresPubliquesView({
                         </div>
                       </div>
 
-                      <div className="flex sm:flex-col gap-2 shrink-0 items-end">
+                      <div
+                        className="flex sm:flex-col gap-2.5 shrink-0 items-end"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <div className="flex items-center gap-2">
                           {offre.salaire && (
                             <div className="text-right text-xs font-extrabold text-[#192237]">
@@ -601,22 +673,12 @@ export function OffresPubliquesView({
                           {onToggleFavori && (
                             <button
                               type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onToggleFavori(offre.id);
-                              }}
+                              onClick={() => onToggleFavori(offre.id)}
                               className={`grid size-8 place-items-center rounded-xl border transition ${
                                 isJobFavorited(offre.id, favorisOffresIds)
                                   ? 'border-[#fecdd3] bg-[#fff1f2] text-[#e11d48]'
                                   : 'border-[#e5e8f0] bg-white text-[#949eb5] hover:text-[#e11d48] hover:bg-[#fff1f2]'
                               }`}
-                              title={
-                                !currentUser
-                                  ? 'Connectez-vous pour ajouter aux favoris'
-                                  : isJobFavorited(offre.id, favorisOffresIds)
-                                  ? 'Retirer des favoris'
-                                  : 'Sauvegarder en favoris'
-                              }
                             >
                               <Heart
                                 size={14}
@@ -630,27 +692,23 @@ export function OffresPubliquesView({
 
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => setSelectedJob(offre)}
+                            type="button"
+                            onClick={() => openJobDetail(offre)}
                             className="rounded-xl border border-[#e2e5ee] bg-white px-3.5 py-2 text-xs font-bold text-[#374151] hover:bg-[#f6f7fb] transition"
                           >
                             Détails
                           </button>
                           {isExpired ? (
-                            <span
-                              title="La date limite de candidature est dépassée"
-                              className="inline-flex items-center gap-1 rounded-xl bg-[#fef2f2] px-3 py-2 text-xs font-bold text-[#b91c1c] border border-[#fecaca]"
-                            >
+                            <span className="inline-flex items-center gap-1 rounded-xl bg-[#fef2f2] px-3 py-2 text-xs font-bold text-[#b91c1c] border border-[#fecaca]">
                               <Clock size={12} /> Clôturée
                             </span>
                           ) : hasApplied ? (
-                            <span
-                              title="Vous avez déjà postulé à cette offre"
-                              className="inline-flex items-center gap-1 rounded-xl bg-[#ecfdf5] px-3 py-2 text-xs font-bold text-[#059669] border border-[#a7f3d0]"
-                            >
-                              <CheckCircle2 size={12} /> Déjà postulé
+                            <span className="inline-flex items-center gap-1 rounded-xl bg-[#ecfdf5] px-3 py-2 text-xs font-bold text-[#059669] border border-[#a7f3d0]">
+                              <CheckCircle2 size={12} /> Postulé
                             </span>
                           ) : (
                             <button
+                              type="button"
                               onClick={() => onPostuler(offre)}
                               className="rounded-xl bg-[#594be0] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#483ad3] transition"
                             >
@@ -665,25 +723,6 @@ export function OffresPubliquesView({
               })}
             </div>
           )}
-
-          {/* Pagination */}
-          <div className="mt-8 flex items-center justify-center gap-2 text-xs font-bold text-[#626c82]">
-            <button className="grid size-8 place-items-center rounded-lg border border-[#e2e5ee] bg-white hover:bg-[#f6f7fb]">
-              <ChevronLeft size={16} />
-            </button>
-            <button className="grid size-8 place-items-center rounded-lg bg-[#594be0] text-white">
-              1
-            </button>
-            <button className="grid size-8 place-items-center rounded-lg border border-[#e2e5ee] bg-white hover:bg-[#f6f7fb]">
-              2
-            </button>
-            <button className="grid size-8 place-items-center rounded-lg border border-[#e2e5ee] bg-white hover:bg-[#f6f7fb]">
-              3
-            </button>
-            <button className="grid size-8 place-items-center rounded-lg border border-[#e2e5ee] bg-white hover:bg-[#f6f7fb]">
-              <ChevronRight size={16} />
-            </button>
-          </div>
         </div>
       </div>
     </div>

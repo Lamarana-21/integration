@@ -193,18 +193,6 @@ export function PostulerModal({
               <strong>{submittedCvName}</strong>.
             </p>
 
-            {analysis && (
-              <div className="mt-5 rounded-2xl border border-[#cbeedc] bg-[#edf9f3] p-4 text-left">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold text-[#287e56]">Score de correspondance ATS</div>
-                  <div className="text-2xl font-black text-[#258957]">
-                    {analysis.score_correspondance}/100
-                  </div>
-                </div>
-                <p className="mt-1 text-[11px] text-[#4b7562]">{analysis.resume}</p>
-              </div>
-            )}
-
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <button
                 onClick={() => {
@@ -327,7 +315,7 @@ export function PostulerModal({
                             🚀 Utiliser mon CV dynamique de l'application
                           </span>
                           <span className="rounded-full bg-[#efedff] px-2 py-0.5 text-[9px] font-black text-[#5547d7]">
-                            Recommandé ATS
+                            Synchronisé
                           </span>
                         </div>
 

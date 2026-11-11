@@ -18,9 +18,7 @@ class AnalyseCvController extends Controller
         $this->aiService = $aiService;
     }
 
-    /**
-     * Module 9.7 : Relancer l'analyse IA
-     */
+    
     public function relancer(string $id): JsonResponse
     {
         $ancienne = AnalyseCv::with(['cv.candidat', 'candidature.offre'])->findOrFail($id);
@@ -74,13 +72,11 @@ class AnalyseCvController extends Controller
         ]);
     }
 
-    /**
-     * Valider l'analyse sans modification
-     */
+    
     public function valider(string $id): JsonResponse
     {
         $analyse = AnalyseCv::findOrFail($id);
-        $analyse->update(['valide_par_recruteur' => true]);
+        $analyse->update(['valide_par_recruteur' => 1]);
 
         return response()->json([
             'message' => 'Analyse validée',

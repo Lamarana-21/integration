@@ -122,7 +122,7 @@ export function FavorisOffresView({
                 </span>
               </div>
               <p className="text-xs text-[#717a92] mt-0.5">
-                Retrouvez vos offres coup de cœur, postulez avec votre CV ou contactez directement le recruteur.
+                Retrouvez vos offres coup de cœur, postulez avec votre CV ou contactez directement l'entreprise.
               </p>
             </div>
           </div>

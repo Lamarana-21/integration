@@ -47,7 +47,10 @@ Route::delete('/jobs/{id}', [OffreController::class, 'destroy']);
 Route::get('/applications', [CandidatureController::class, 'index']);
 Route::get('/applications/my', [CandidatureController::class, 'mesCandidatures']);
 Route::post('/jobs/{id}/applications', [CandidatureController::class, 'postuler']);
+Route::get('/jobs/{id}/applications', [CandidatureController::class, 'indexByOffre']);
 Route::patch('/applications/{id}/status', [CandidatureController::class, 'updateStatus']);
+Route::post('/applications/{id}/notes', [CandidatureController::class, 'addNote']);
+Route::post('/applications/bulk-status', [CandidatureController::class, 'bulkUpdateStatus']);
 Route::delete('/applications/{id}', [CandidatureController::class, 'retirer']);
 
 Route::get('/companies', [EntrepriseController::class, 'index']);
@@ -86,55 +89,25 @@ Route::post('/candidates/favoris/toggle', [CandidatController::class, 'toggleFav
 Route::get('/notifications', [NotificationController::class, 'index']);
 Route::post('/notifications/{id}/resend', [NotificationController::class, 'resend']);
 
+// --- Module 9 : Analyse IA (En arrière-plan & Relance) ---
+Route::post('/cvs/{id}/analyse', [AnalyseCvController::class, 'analyserCv']);
+Route::post('/recruiter/candidatures/{id}/analyse', [AnalyseCvController::class, 'relancer']);
+Route::get('/recruiter/candidatures/{id}/analyse', [AnalyseCvController::class, 'relancer']);
+Route::prefix('analyses')->group(function () {
+    Route::post('/{id}/relancer', [AnalyseCvController::class, 'relancer']);
+    Route::patch('/{id}', [AnalyseCvController::class, 'corriger']);
+    Route::post('/{id}/valider', [AnalyseCvController::class, 'valider']);
+});
+
 // --- 3. Routes Protégées par Authentification Sanctum ---
 Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/jobs/{id}/duplicate', [OffreController::class, 'duplicate'])->middleware('permission:CREER_OFFRE');
+    Route::get('/jobs/{id}/applications/export', [CandidatureController::class, 'exportCsv'])->middleware('permission:VOIR_CANDIDATURES');
 
-    // --- Module 4 : Entreprises ---
-    Route::prefix('companies')->group(function () {
-        Route::post('/', [EntrepriseController::class, 'store'])->middleware('permission:CREER_ENTREPRISE');
-        Route::patch('/{id}', [EntrepriseController::class, 'update'])->middleware('permission:MODIFIER_ENTREPRISE');
-        Route::delete('/{id}', [EntrepriseController::class, 'destroy'])->middleware('permission:DESACTIVER_ENTREPRISE');
-    });
-
-    // --- Module 5 : Offres (Recruteurs & Admin) ---
-    Route::prefix('jobs')->group(function () {
-        Route::post('/', [OffreController::class, 'store'])->middleware('permission:CREER_OFFRE');
-        Route::patch('/{id}', [OffreController::class, 'update'])->middleware('permission:MODIFIER_OFFRE');
-        Route::post('/{id}/publish', [OffreController::class, 'publish'])->middleware('permission:PUBLIER_OFFRE');
-        Route::post('/{id}/close', [OffreController::class, 'close'])->middleware('permission:CLOTURER_OFFRE');
-        Route::post('/{id}/duplicate', [OffreController::class, 'duplicate'])->middleware('permission:CREER_OFFRE');
-        Route::delete('/{id}', [OffreController::class, 'destroy'])->middleware('permission:SUPPRIMER_OFFRE');
-
-        // Candidatures pour cette offre
-        Route::post('/{id}/applications', [CandidatureController::class, 'postuler'])->middleware('permission:POSTULER');
-        Route::get('/{id}/applications', [CandidatureController::class, 'indexByOffre'])->middleware('permission:VOIR_CANDIDATURES');
-        Route::get('/{id}/applications/export', [CandidatureController::class, 'exportCsv'])->middleware('permission:VOIR_CANDIDATURES');
-    });
-
-    // --- Module 6 : Candidats & CV ---
     Route::prefix('candidates')->group(function () {
         Route::get('/', [CandidatController::class, 'index'])->middleware('permission:VOIR_CANDIDAT');
-        Route::get('/profile', [CandidatController::class, 'meProfile']);
-        Route::put('/profile', [CandidatController::class, 'updateProfile']);
         Route::get('/{id}', [CandidatController::class, 'show']);
         Route::delete('/my-data', [CandidatController::class, 'deleteMyData'])->middleware('permission:SUPPRIMER_DONNEES_CANDIDAT');
-    });
-    Route::post('/cvs/{id}/analyse', [AnalyseCvController::class, 'analyserCv']);
-
-    // --- Module 7 & 8 : Candidatures ---
-    Route::prefix('applications')->group(function () {
-        Route::get('/{id}', [CandidatureController::class, 'show']);
-        Route::delete('/{id}', [CandidatureController::class, 'retirer'])->middleware('permission:RETIRER_CANDIDATURE');
-        Route::patch('/{id}/status', [CandidatureController::class, 'updateStatus'])->middleware('permission:CHANGER_STATUT');
-        Route::post('/{id}/notes', [CandidatureController::class, 'addNote'])->middleware('permission:AJOUTER_NOTE');
-        Route::post('/bulk-status', [CandidatureController::class, 'bulkUpdateStatus'])->middleware('permission:CHANGER_STATUT');
-    });
-
-    // --- Module 9 : Analyse IA ---
-    Route::prefix('analyses')->group(function () {
-        Route::post('/{id}/relancer', [AnalyseCvController::class, 'relancer'])->middleware('permission:LANCER_ANALYSE');
-        Route::patch('/{id}', [AnalyseCvController::class, 'corriger'])->middleware('permission:CORRIGER_ANALYSE');
-        Route::post('/{id}/valider', [AnalyseCvController::class, 'valider'])->middleware('permission:CORRIGER_ANALYSE');
     });
 
     // --- Module 10 : Tableaux de bord ---
