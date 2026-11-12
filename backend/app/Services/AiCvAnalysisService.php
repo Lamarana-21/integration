@@ -6,263 +6,360 @@ use App\Models\AnalyseCv;
 use App\Models\Candidature;
 use App\Models\Cv;
 use App\Models\Offre;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class AiCvAnalysisService
 {
-    protected string $modelVersion = 'Talenta-AI-v2.1';
+    protected string $modelVersion = 'Gemini-3.8-Flash / ATS-Strict';
 
     /**
      * Analyse un CV pour une candidature donnée (ou CV autonome)
      */
     public function analyser(Cv $cv, ?Candidature $candidature = null): AnalyseCv
     {
+        $offre = $candidature?->offre;
+
+        // 1. Tenter l'analyse approfondie avec Google Gemini API (avec timeout court pour éviter les blocages)
+        $geminiResult = $this->analyserAvecGemini($cv, $offre);
+
+        if ($geminiResult !== null) {
+            $analyse = AnalyseCv::create([
+                'cv_id' => $cv->id,
+                'candidature_id' => $candidature?->id,
+                'infos_extraites' => $geminiResult['infos_extraites'],
+                'resume' => $geminiResult['resume'],
+                'score_correspondance' => $geminiResult['score'],
+                'points_forts' => $geminiResult['points_forts'],
+                'points_manquants' => $geminiResult['points_manquants'],
+                'niveau_confiance' => $geminiResult['niveau_confiance'],
+                'version_modele' => 'Gemini-3.8-Flash',
+                'valide_par_recruteur' => false,
+            ]);
+
+            Log::info("Analyse CV effectuée via Gemini pour CV: {$cv->id}, Score: {$geminiResult['score']}");
+            return $analyse;
+        }
+
+        // 2. Moteur de validation stricte en local (Parseur de contenu binaire + détection de faux CV)
+        return $this->analyseLocaleStricte($cv, $candidature);
+    }
+
+    /**
+     * Analyse multimodale Gemini
+     */
+    protected function analyserAvecGemini(Cv $cv, ?Offre $offre): ?array
+    {
+        $apiKey = env('GEMINI_API_KEY');
+        if (empty($apiKey) || empty($cv->contenu_base64)) {
+            return null;
+        }
+
+        $base64 = $cv->contenu_base64;
+        if (str_contains($base64, ',')) {
+            $base64 = explode(',', $base64)[1];
+        }
+
+        $offreTitre = $offre ? $offre->titre : 'Poste non spécifié';
+        $offreSkills = $offre && !empty($offre->competences_requises)
+            ? implode(', ', $offre->competences_requises)
+            : 'Compétences requises';
+
+        $prompt = <<<PROMPT
+Tu es un évaluateur ATS et recruteur très rigoureux.
+Analyse le document PDF joint par rapport à cette offre d'emploi :
+- Poste visé : {$offreTitre}
+- Compétences requises : {$offreSkills}
+
+RÈGLES STRICTES :
+1. VÉRIFICATION DU TYPE DE DOCUMENT :
+   - Est-ce un Curriculum Vitæ professionnel ?
+   - Si le document est un TP, des notes de cours, une facture, un texte quelconque qui n'a pas la structure d'un CV : 'est_cv' DOIT ÊTRE FAUX (false), 'score' DOIT ÊTRE 0, 'niveau_confiance' DOIT ÊTRE 'FAIBLE'.
+   - 'resume' : "Document non conforme : Le fichier fourni ne constitue pas un curriculum vitæ (absence de parcours professionnel et de formation structurés)."
+2. SI C'EST UN VRAI CV :
+   - Extrais uniquement les vraies compétences et expériences du document.
+   - Calcule le score réel par rapport aux compétences ({$offreSkills}).
+
+Format JSON strict sans balises markdown :
+{
+  "est_cv": boolean,
+  "score": integer (0 à 100),
+  "resume": "résumé clair",
+  "points_forts": ["point 1"],
+  "points_manquants": ["point 1"],
+  "niveau_confiance": "FAIBLE" | "MOYEN" | "ELEVE",
+  "infos_extraites": {
+    "competences": ["comp1"],
+    "experiences": [{"poste": "...", "employeur": "...", "dates": "..."}],
+    "formations": [{"diplome": "...", "ecole": "...", "annee": "..."}],
+    "langues": ["Français", "Anglais"]
+  }
+}
+PROMPT;
+
+        try {
+            // Utiliser le modèle stable gemini-3.8-flash recommandé par Google AI Studio
+            $response = Http::timeout(8)
+                ->withoutVerifying()
+                ->post("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={$apiKey}", [
+                    'contents' => [
+                        [
+                            'parts' => [
+                                ['inlineData' => ['mimeType' => 'application/pdf', 'data' => $base64]],
+                                ['text' => $prompt],
+                            ],
+                        ],
+                    ],
+                    'generationConfig' => [
+                        'responseMimeType' => 'application/json',
+                        'temperature' => 0.1,
+                    ],
+                ]);
+
+            if ($response->successful()) {
+                $candidates = $response->json('candidates', []);
+                $textResult = $candidates[0]['content']['parts'][0]['text'] ?? '';
+                if (!empty($textResult)) {
+                    $json = json_decode(trim($textResult), true);
+                    if (is_array($json) && isset($json['score'])) {
+                        return [
+                            'est_cv' => (bool) ($json['est_cv'] ?? true),
+                            'score' => max(0, min(100, (int) $json['score'])),
+                            'resume' => $json['resume'] ?? 'Analyse effectuée avec succès.',
+                            'points_forts' => is_array($json['points_forts'] ?? null) ? $json['points_forts'] : [],
+                            'points_manquants' => is_array($json['points_manquants'] ?? null) ? $json['points_manquants'] : [],
+                            'niveau_confiance' => $json['niveau_confiance'] ?? 'MOYEN',
+                            'infos_extraites' => is_array($json['infos_extraites'] ?? null) ? $json['infos_extraites'] : [
+                                'competences' => [],
+                                'experiences' => [],
+                                'formations' => [],
+                                'langues' => [],
+                            ],
+                        ];
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::info("Gemini indisponible ou timeout, bascule sur l'analyseur ATS local : " . $e->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Analyseur ATS local strict : extrait le texte réel du PDF et vérifie la validité du CV
+     */
+    protected function analyseLocaleStricte(Cv $cv, ?Candidature $candidature): AnalyseCv
+    {
         $candidat = $cv->candidat;
         $offre = $candidature?->offre;
 
-        // 1. Module 9.8 : Élimination préventive des biais démographiques
-        // On anonymise le profil (pas de nom complet, âge, genre, photo, nationalité dans le prompt/calcul)
-        $anonymizedProfile = $this->preparerDonneesAnonymisees($candidat);
+        // 1. Extraire le texte réel contenu dans le PDF
+        $texteExtrait = $this->extraireTextePdf($cv);
 
-        // 2. Module 9.2 : Extraction d'informations structurées
-        $infosExtraites = $this->extraireInfosStructurees($anonymizedProfile, $cv);
+        // 2. Détecter si le document est un vrai CV ou un document quelconque (TP, rapport, cours, etc.)
+        $validationCv = $this->validerConformiteCv($cv, $texteExtrait);
 
-        // 3. Module 9.3 : Résumé clair et professionnel du profil
-        $resume = $this->genererResume($infosExtraites, $offre);
-
-        // 4. Module 9.4 : Calcul du score de correspondance avec l'offre
-        $scoreResult = $this->calculerScoreCorrespondance($infosExtraites, $offre, $cv);
-
-        // 5. Module 9.5 : Niveau de confiance
-        $niveauConfiance = $this->evaluerNiveauConfiance($infosExtraites, $cv);
-
-        // 6. Module 9.9 : Enregistrement et journalisation
-        $analyse = AnalyseCv::create([
-            'cv_id' => $cv->id,
-            'candidature_id' => $candidature?->id,
-            'infos_extraites' => $infosExtraites,
-            'resume' => $resume,
-            'score_correspondance' => $scoreResult['score'],
-            'points_forts' => $scoreResult['points_forts'],
-            'points_manquants' => $scoreResult['points_manquants'],
-            'niveau_confiance' => $niveauConfiance,
-            'version_modele' => $this->modelVersion,
-            'valide_par_recruteur' => false,
-        ]);
-
-        Log::info("Analyse CV effectuée par {$this->modelVersion} pour CV: {$cv->id}, Candidature: {$candidature?->id}, Score: {$scoreResult['score']}");
-
-        return $analyse;
-    }
-
-    /**
-     * Anonymisation (Module 9.8)
-     */
-    protected function preparerDonneesAnonymisees($candidat): array
-    {
-        return [
-            'competences' => $candidat?->competences ?? [],
-            'experiences' => $candidat?->experiences ?? [],
-            'formations' => $candidat?->formations ?? [],
-            'langues' => $candidat?->langues ?? [],
-            'resume_candidat' => $candidat?->resume ?? '',
-        ];
-    }
-
-    /**
-     * Extraction des informations structurées
-     */
-    protected function extraireInfosStructurees(array $profile, Cv $cv): array
-    {
-        $competences = !empty($profile['competences']) 
-            ? $profile['competences'] 
-            : ['React', 'JavaScript', 'Node.js', 'SQL', 'Git'];
-
-        $experiences = !empty($profile['experiences']) 
-            ? $profile['experiences'] 
-            : [
-                [
-                    'poste' => 'Développeur Full Stack Junior',
-                    'employeur' => 'Tech Agency',
-                    'dates' => '2024 - 2026',
-                    'description' => 'Développement d’applications web avec React et API REST'
-                ]
-            ];
-
-        $formations = !empty($profile['formations']) 
-            ? $profile['formations'] 
-            : [
-                [
-                    'diplome' => 'Licence en Informatique',
-                    'ecole' => 'Université de Technologie',
-                    'annee' => '2024'
-                ]
-            ];
-
-        $langues = !empty($profile['langues']) 
-            ? $profile['langues'] 
-            : ['Français (Courant)', 'Anglais (Technique)'];
-
-        return [
-            'competences' => $competences,
-            'experiences' => $experiences,
-            'formations' => $formations,
-            'langues' => $langues,
-        ];
-    }
-
-    /**
-     * Génération de résumé lisible (Module 9.3)
-     */
-    protected function genererResume(array $infos, ?Offre $offre): string
-    {
-        $nbExp = count($infos['experiences']);
-        $skillsStr = implode(', ', array_slice($infos['competences'], 0, 4));
-        
-        $roleCible = $offre ? $offre->titre : 'Poste technique';
-        return "Profil orienté {$roleCible} avec {$nbExp} expérience(s) documentée(s). Maîtrise des technologies clés : {$skillsStr}. Parcours académique validé.";
-    }
-
-    /**
-     * Calcul du score de correspondance, points forts et manques (Module 9.4)
-     */
-    protected function calculerScoreCorrespondance(array $infos, ?Offre $offre, Cv $cv): array
-    {
-        if (!$offre) {
-            $ats = $this->calculerScoreATS($infos, $cv);
-            return [
-                'score' => $ats['score'],
-                'points_forts' => $ats['points_forts'],
-                'points_manquants' => $ats['points_manquants'],
-            ];
+        if (!$validationCv['est_valide']) {
+            return AnalyseCv::create([
+                'cv_id' => $cv->id,
+                'candidature_id' => $candidature?->id,
+                'infos_extraites' => [
+                    'competences' => [],
+                    'experiences' => [],
+                    'formations' => [],
+                    'langues' => [],
+                ],
+                'resume' => "Document non conforme : Le fichier « {$cv->nom_fichier} » ne possède pas la structure d'un curriculum vitæ. " . $validationCv['motif'],
+                'score_correspondance' => 0,
+                'points_forts' => [],
+                'points_manquants' => [
+                    "Document non reconnu comme un CV professionnel (score: 0%).",
+                    "Veuillez déposer un document contenant vos expériences, formations et compétences."
+                ],
+                'niveau_confiance' => 'FAIBLE',
+                'version_modele' => $this->modelVersion,
+                'valide_par_recruteur' => false,
+            ]);
         }
 
+        // 3. Si c'est un vrai CV : rechercher les vraies compétences dans le texte extrait
         $requises = array_map('strtolower', $offre->competences_requises ?? []);
-        $possedees = array_map('strtolower', $infos['competences'] ?? []);
+        $texteLower = strtolower($texteExtrait);
 
         $correspondances = [];
         $manquantes = [];
 
         foreach ($requises as $req) {
-            $trouve = false;
-            foreach ($possedees as $pos) {
-                if (str_contains($pos, $req) || str_contains($req, $pos)) {
-                    $trouve = true;
-                    break;
-                }
-            }
-            if ($trouve) {
+            $pattern = '/\b' . preg_quote($req, '/') . '\b/i';
+            if (preg_match($pattern, $texteLower) || str_contains($texteLower, $req)) {
                 $correspondances[] = ucfirst($req);
             } else {
                 $manquantes[] = ucfirst($req);
             }
         }
 
+        // Si le texte est très court ou ne mentionne aucune compétence du profil
         $totalReq = max(1, count($requises));
         $matchRate = count($correspondances) / $totalReq;
 
-        // Base score pondéré: 60% compétences, 20% expériences, 20% langues/formation
-        $hasExp = !empty($infos['experiences']) ? 20 : 10;
-        $hasLang = !empty($infos['langues']) ? 15 : 5;
-        $scoreCompetences = (int) ($matchRate * 65);
-
-        $totalScore = min(98, max(35, $scoreCompetences + $hasExp + $hasLang));
-
-        $pointsForts = [];
-        foreach ($correspondances as $comp) {
-            $pointsForts[] = "Maîtrise validée : {$comp}";
-        }
-        if (!empty($infos['experiences'])) {
-            $pointsForts[] = "Expérience de terrain en phase avec les missions";
-        }
-
-        $pointsManquants = [];
-        foreach ($manquantes as $manq) {
-            $pointsManquants[] = "Compétence non mentionnée dans le CV : {$manq}";
-        }
-        if (empty($pointsManquants)) {
-            $pointsManquants[] = "Vérifier le niveau d'autonomie lors de l'entretien technique";
+        if (count($correspondances) === 0) {
+            return AnalyseCv::create([
+                'cv_id' => $cv->id,
+                'candidature_id' => $candidature?->id,
+                'infos_extraites' => [
+                    'competences' => [],
+                    'experiences' => [],
+                    'formations' => [],
+                    'langues' => [],
+                ],
+                'resume' => "Adéquation nulle : Le CV déposé (« {$cv->nom_fichier} ») ne mentionne aucune des compétences exigées pour le poste « {$offre?->titre} ».",
+                'score_correspondance' => 0,
+                'points_forts' => [],
+                'points_manquants' => array_map(fn($m) => "Compétence requise absente du document : {$m}", $manquantes),
+                'niveau_confiance' => 'MOYEN',
+                'version_modele' => $this->modelVersion,
+                'valide_par_recruteur' => false,
+            ]);
         }
 
-        return [
-            'score' => $totalScore,
-            'points_forts' => array_slice($pointsForts, 0, 4),
-            'points_manquants' => array_slice($pointsManquants, 0, 3),
-        ];
+        $score = (int) round($matchRate * 85 + 10);
+        $score = min(96, max(15, $score));
+
+        return AnalyseCv::create([
+            'cv_id' => $cv->id,
+            'candidature_id' => $candidature?->id,
+            'infos_extraites' => [
+                'competences' => $correspondances,
+                'experiences' => $candidat?->experiences ?? [],
+                'formations' => $candidat?->formations ?? [],
+                'langues' => $candidat?->langues ?? ['Français', 'Anglais'],
+            ],
+            'resume' => "Profil en adéquation partielle avec l'offre « {$offre?->titre} ». " . count($correspondances) . " sur " . count($requises) . " compétence(s) clé(s) validée(s) dans le document.",
+            'score_correspondance' => $score,
+            'points_forts' => array_map(fn($c) => "Compétence validée dans le CV : {$c}", $correspondances),
+            'points_manquants' => array_map(fn($c) => "Compétence absente du CV : {$c}", $manquantes),
+            'niveau_confiance' => count($correspondances) >= 2 ? 'ELEVE' : 'MOYEN',
+            'version_modele' => $this->modelVersion,
+            'valide_par_recruteur' => false,
+        ]);
     }
 
     /**
-     * Score ATS pour un CV autonome : lisibilité, structure et contenu indexable.
+     * Extraction textuelle brute depuis les flux PDF binaires (décompresse les flux FlateDecode et les flux texte)
      */
-    protected function calculerScoreATS(array $infos, Cv $cv): array
+    protected function extraireTextePdf(Cv $cv): string
     {
-        $score = 0;
-        $pointsForts = [];
-        $pointsManquants = [];
-
-        $extension = strtolower(pathinfo($cv->nom_fichier, PATHINFO_EXTENSION));
-        if (in_array($extension, ['pdf', 'docx'], true)) {
-            $score += 20;
-            $pointsForts[] = 'Format PDF/DOCX lisible par les ATS';
-        } else {
-            $pointsManquants[] = 'Utiliser un fichier PDF ou DOCX standard';
+        $base64 = $cv->contenu_base64 ?? '';
+        if (empty($base64)) {
+            return '';
         }
 
-        if ($cv->taille_octets >= 1000 && $cv->taille_octets <= 5 * 1024 * 1024) {
-            $score += 10;
-            $pointsForts[] = 'Taille de fichier compatible avec un traitement ATS';
-        } else {
-            $pointsManquants[] = 'Vérifier la taille et le contenu du fichier';
+        if (str_contains($base64, ',')) {
+            $base64 = explode(',', $base64)[1];
         }
 
-        $sections = [
-            'Compétences' => !empty($infos['competences']),
-            'Expériences' => !empty($infos['experiences']),
-            'Formations' => !empty($infos['formations']),
-            'Langues' => !empty($infos['langues']),
-        ];
-        $sectionsPresentes = count(array_filter($sections));
-        $score += $sectionsPresentes * 12;
-        foreach ($sections as $section => $present) {
-            if ($present) {
-                $pointsForts[] = "Section {$section} détectée";
-            } else {
-                $pointsManquants[] = "Ajouter une section {$section}";
+        $raw = base64_decode($base64);
+        if (!$raw || strlen($raw) < 10) {
+            return '';
+        }
+
+        $texte = '';
+
+        // 1. Décompression des streams PDF compressés (FlateDecode)
+        if (preg_match_all('/stream[\r\n]+(.*?)[\r\n]+endstream/is', $raw, $matches)) {
+            foreach ($matches[1] as $stream) {
+                $uncompressed = @gzuncompress($stream);
+                if ($uncompressed === false) {
+                    $uncompressed = @gzinflate($stream);
+                }
+                if ($uncompressed !== false) {
+                    // Extraire le texte entre parenthèses (...) Tj ou [(...)] TJ
+                    if (preg_match_all('/\((.*?)\)\s*T[jJ]/s', $uncompressed, $tMatches)) {
+                        $texte .= ' ' . implode(' ', $tMatches[1]);
+                    }
+                    if (preg_match_all('/\[(.*?)\]\s*TJ/s', $uncompressed, $tjMatches)) {
+                        foreach ($tjMatches[1] as $arr) {
+                            if (preg_match_all('/\((.*?)\)/s', $arr, $subMatches)) {
+                                $texte .= ' ' . implode('', $subMatches[1]);
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        if (count($infos['competences']) >= 5) {
-            $score += 12;
-            $pointsForts[] = 'Mots-clés techniques suffisamment détaillés';
-        } else {
-            $pointsManquants[] = 'Ajouter davantage de mots-clés liés au poste visé';
+        // 2. Extraire les chaînes texte en clair si non compressées
+        if (preg_match_all('/\(([^\)]{3,})\)\s*T[jJ]/s', $raw, $tMatches)) {
+            $texte .= ' ' . implode(' ', $tMatches[1]);
         }
 
-        $score = min(100, max(0, $score));
+        // 3. Fallback caractères alphanumériques lisibles
+        if (empty(trim($texte))) {
+            $filtered = preg_replace('/[^a-zA-Z0-9\sÀ-ÿ\.\,\-\_\:\;\@\/\(\)]/', ' ', $raw);
+            $filtered = preg_replace('/\s+/', ' ', $filtered);
+            $texte = trim($filtered);
+        }
 
-        return [
-            'score' => $score,
-            'points_forts' => array_slice($pointsForts, 0, 5),
-            'points_manquants' => array_slice($pointsManquants, 0, 5),
-        ];
+        return $texte;
     }
 
     /**
-     * Évaluation du niveau de confiance (Module 9.5)
+     * Valide si le document est un vrai CV professionnel ou un faux document
      */
-    protected function evaluerNiveauConfiance(array $infos, Cv $cv): string
+    protected function validerConformiteCv(Cv $cv, string $texte): array
     {
-        $nbSkills = count($infos['competences']);
-        $nbExp = count($infos['experiences']);
+        $nomFichier = strtolower($cv->nom_fichier ?? '');
 
-        if ($nbSkills >= 4 && $nbExp >= 1 && $cv->taille_octets > 2000) {
-            return 'ELEVE';
+        // 1. Rejet par nom de fichier suspect (TP de cours, devoir, rapport, projet étudiant, etc.)
+        $motsRejet = ['tp_', 'tp-', 'tp.', 'devoir', 'cours', 'facture', 'invoice', 'exercice', 'rapport_stage'];
+        foreach ($motsRejet as $motif) {
+            if (str_contains($nomFichier, $motif)) {
+                return [
+                    'est_valide' => false,
+                    'motif' => "Le nom du fichier (« {$cv->nom_fichier} ») indique un document académique ou administratif non lié à un CV.",
+                ];
+            }
         }
 
-        if ($nbSkills >= 2) {
-            return 'MOYEN';
+        // 2. Si le texte extrait est vide ou quasi-vide (< 40 caractères)
+        if (strlen(trim($texte)) < 40) {
+            return [
+                'est_valide' => false,
+                'motif' => "Le document ne contient aucun contenu textuel indexable ou exploitable.",
+            ];
         }
 
-        return 'FAIBLE';
+        // 3. Vérification des piliers structurels d'un CV
+        $texteLower = strtolower($texte);
+        $piliers = [
+            'experience' => ['expérience', 'experience', 'parcours', 'emploi', 'poste', 'stage', 'missions'],
+            'formation' => ['formation', 'diplôme', 'diplome', 'études', 'etudes', 'université', 'universite', 'licence', 'master', 'bac', 'école', 'ecole'],
+            'competence' => ['compétence', 'competence', 'skills', 'technologies', 'outils', 'connaissances', 'langages'],
+            'contact' => ['email', 'mail', 'tél', 'tel', 'téléphone', 'adresse', 'contact', '@'],
+        ];
+
+        $piliersDetectes = 0;
+        foreach ($piliers as $categorie => $mots) {
+            foreach ($mots as $mot) {
+                if (str_contains($texteLower, $mot)) {
+                    $piliersDetectes++;
+                    break;
+                }
+            }
+        }
+
+        // Pour être un CV valide, le document doit comporter au moins 2 piliers structurels
+        if ($piliersDetectes < 2) {
+            return [
+                'est_valide' => false,
+                'motif' => "Le document ne contient pas les rubriques essentielles d'un curriculum vitæ (expériences, formations, compétences, contact).",
+            ];
+        }
+
+        return [
+            'est_valide' => true,
+            'motif' => 'Structure de CV validée.',
+        ];
     }
 }

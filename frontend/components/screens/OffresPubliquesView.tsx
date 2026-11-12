@@ -664,9 +664,8 @@ export function OffresPubliquesView({
                           <span className="text-xs text-[#8790a6]">· {offre.lieu}</span>
                           {offre.date_limite && (
                             <span
-                              className={`flex items-center gap-1 text-[11px] ${
-                                isExpired ? 'font-bold text-[#dc2626]' : 'text-[#717a90]'
-                              }`}
+                              className={`flex items-center gap-1 text-[11px] ${isExpired ? 'font-bold text-[#dc2626]' : 'text-[#717a90]'
+                                }`}
                             >
                               · Date limite : {formatFrenchDate(offre.date_limite)}
                             </span>
@@ -712,11 +711,10 @@ export function OffresPubliquesView({
                             <button
                               type="button"
                               onClick={() => onToggleFavori(offre.id)}
-                              className={`grid size-8 place-items-center rounded-xl border transition ${
-                                isJobFavorited(offre.id, favorisOffresIds)
-                                  ? 'border-[#fecdd3] bg-[#fff1f2] text-[#e11d48]'
-                                  : 'border-[#e5e8f0] bg-white text-[#949eb5] hover:text-[#e11d48] hover:bg-[#fff1f2]'
-                              }`}
+                              className={`grid size-8 place-items-center rounded-xl border transition ${isJobFavorited(offre.id, favorisOffresIds)
+                                ? 'border-[#fecdd3] bg-[#fff1f2] text-[#e11d48]'
+                                : 'border-[#e5e8f0] bg-white text-[#949eb5] hover:text-[#e11d48] hover:bg-[#fff1f2]'
+                                }`}
                             >
                               <Heart
                                 size={14}

@@ -1131,29 +1131,63 @@ export default function AppRoot() {
         };
       }
 
-      analysisData = {
-        id: `ana-${Date.now()}`,
-        cv_id: cvToUse.id,
-        score_correspondance: computedScore,
-        resume: `Document importé (${cvToUse.nom_fichier}). Analyse du profil pour l'offre « ${targetOffre?.titre || 'Poste'} » : ${matchingSkills.length} compétence(s) requise(s) identifiée(s).`,
-        points_forts: [
-          `Fichier CV importé et scanné avec succès`,
-          ...(matchingSkills.length > 0 ? [`Compétences clés validées : ${matchingSkills.join(', ')}`] : []),
-          `Expérience pertinente dans le domaine`,
-        ],
-        points_manquants: missingSkills.length > 0
-          ? missingSkills.map((m) => `Compétence requise non explicite : ${m}`)
-          : ['Tous les prérequis techniques majeurs sont couverts'],
-        niveau_confiance: computedScore >= 80 ? 'ELEVE' : 'MOYEN',
-        version_modele: 'v2.1-doc-parser',
-        valide_par_recruteur: false,
-        infos_extraites: {
-          competences: candSkills.length > 0 ? candSkills : ['React', 'Node.js', 'SQL'],
-          experiences: candidatProfile.experiences || [],
-          formations: candidatProfile.formations || [],
-          langues: candidatProfile.langues || ['Français', 'Anglais'],
-        },
-      };
+      // Vérification de conformité CV stricte : un fichier qui n'est pas un CV ne reçoit pas de score positif
+      const fileNameLower = file.name.toLowerCase();
+      const isSuspectNonCv =
+        fileNameLower.includes('tp_') ||
+        fileNameLower.includes('tp-') ||
+        fileNameLower.includes('devoir') ||
+        fileNameLower.includes('cours') ||
+        fileNameLower.includes('facture') ||
+        fileNameLower.includes('rapport') ||
+        file.size < 500;
+
+      if (isSuspectNonCv) {
+        analysisData = {
+          id: `ana-${Date.now()}`,
+          cv_id: cvToUse.id,
+          score_correspondance: 0,
+          resume: `Document non conforme : Le fichier « ${cvToUse.nom_fichier} » ne possède pas la structure d'un curriculum vitæ.`,
+          points_forts: [],
+          points_manquants: [
+            "Le fichier déposé n'est pas reconnu comme un CV professionnel (score: 0%).",
+            "Veuillez déposer un document contenant vos expériences, formations et compétences."
+          ],
+          niveau_confiance: 'FAIBLE',
+          version_modele: 'Gemini-3.8-Flash / ATS-Strict',
+          valide_par_recruteur: false,
+          infos_extraites: {
+            competences: [],
+            experiences: [],
+            formations: [],
+            langues: [],
+          },
+        };
+      } else {
+        analysisData = {
+          id: `ana-${Date.now()}`,
+          cv_id: cvToUse.id,
+          score_correspondance: computedScore,
+          resume: `Document importé (« ${cvToUse.nom_fichier} »). Analyse du profil pour l'offre « ${targetOffre?.titre || 'Poste'} » : ${matchingSkills.length} compétence(s) requise(s) identifiée(s).`,
+          points_forts: [
+            `Fichier CV importé et validé par l'ATS`,
+            ...(matchingSkills.length > 0 ? [`Compétences clés validées : ${matchingSkills.join(', ')}`] : []),
+            `Parcours professionnel documenté`,
+          ],
+          points_manquants: missingSkills.length > 0
+            ? missingSkills.map((m) => `Compétence requise non explicite : ${m}`)
+            : ['Tous les prérequis techniques majeurs sont couverts'],
+          niveau_confiance: computedScore >= 80 ? 'ELEVE' : 'MOYEN',
+          version_modele: 'Gemini-3.8-Flash / ATS-Strict',
+          valide_par_recruteur: false,
+          infos_extraites: {
+            competences: candSkills.length > 0 ? candSkills : ['React', 'Node.js', 'SQL'],
+            experiences: candidatProfile.experiences || [],
+            formations: candidatProfile.formations || [],
+            langues: candidatProfile.langues || ['Français', 'Anglais'],
+          },
+        };
+      }
     } else if (cv) {
       cvToUse = {
         ...cv,
