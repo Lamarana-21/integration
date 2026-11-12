@@ -7,20 +7,27 @@ import {
   BriefcaseBusiness,
   Calendar,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
   Clock,
+  Download,
   Edit3,
   Eye,
+  FileText,
   Lock,
   MapPin,
   Plus,
   Save,
   Search,
   Send,
+  Sparkles,
   Trash2,
   Users,
   X,
 } from 'lucide-react';
 import {
+  ApplicationStatus,
   Candidature,
   ContractType,
   Entreprise,
@@ -28,6 +35,7 @@ import {
   User,
   formatFrenchDate,
 } from '@/lib/types';
+import { resolveDepositedCv, downloadCandidateCvFile } from './CandidaturesOffreView';
 
 interface NouvelleOffreViewProps {
   initialOffre?: Offre | null;
@@ -40,6 +48,7 @@ interface NouvelleOffreViewProps {
   onEditJob?: (job: Offre | null) => void;
   onCloseJob?: (id: string) => void;
   onDeleteJob?: (id: string) => void;
+  onOpenCandidatureDetail?: (candidature: Candidature) => void;
 }
 
 export function NouvelleOffreView({
@@ -53,12 +62,14 @@ export function NouvelleOffreView({
   onEditJob,
   onCloseJob,
   onDeleteJob,
+  onOpenCandidatureDetail,
 }: NouvelleOffreViewProps) {
   const [mode, setMode] = useState<'LIST' | 'FORM'>(initialOffre ? 'FORM' : 'LIST');
   const [editingJob, setEditingJob] = useState<Offre | null>(initialOffre || null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PUBLIEE' | 'CLOTUREE' | 'BROUILLON'>('ALL');
   const [confirmDeleteJob, setConfirmDeleteJob] = useState<Offre | null>(null);
+  const [expandedOfferId, setExpandedOfferId] = useState<string | null>(null);
 
   // Form states
   const [titre, setTitre] = useState(initialOffre?.titre || '');
@@ -392,8 +403,22 @@ export function NouvelleOffreView({
                       )}
                     </div>
 
-                    {/* Boutons d'action : Modifier, Clôturer, Supprimer */}
+                    {/* Boutons d'action : Voir candidatures, Modifier, Clôturer, Supprimer */}
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedOfferId((prev) => (prev === job.id ? null : job.id))}
+                        className={`inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                          expandedOfferId === job.id
+                            ? 'border-[#594be0] bg-[#594be0] text-white shadow-xs'
+                            : 'border-[#cbd5e1] bg-[#f8fafc] text-[#334155] hover:bg-[#eef2ff] hover:text-[#594be0]'
+                        }`}
+                      >
+                        <Users size={13} />
+                        <span>Candidatures ({appCount})</span>
+                        {expandedOfferId === job.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => handleOpenEditForm(job)}
@@ -423,6 +448,142 @@ export function NouvelleOffreView({
                       )}
                     </div>
                   </div>
+
+                  {/* Accordéon déroulant : Liste des candidatures reçues pour cette offre */}
+                  {expandedOfferId === job.id && (() => {
+                    const jobCands = candidatures
+                      .filter((c) => c.offre_id === job.id)
+                      .sort((a, b) => {
+                        const aRecue = a.statut === 'RECUE' ? 1 : 0;
+                        const bRecue = b.statut === 'RECUE' ? 1 : 0;
+                        if (bRecue !== aRecue) return bRecue - aRecue;
+                        const dA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                        const dB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                        return dB - dA;
+                      });
+
+                    return (
+                      <div className="mt-5 border-t border-[#f1f5f9] pt-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-[#475569] flex items-center gap-1.5">
+                            <Users size={14} className="text-[#594be0]" /> Candidatures reçues pour ce poste ({jobCands.length})
+                          </h4>
+                          <span className="text-[11px] font-semibold text-[#64748b]">
+                            Triées : nouvelles en tête
+                          </span>
+                        </div>
+
+                        {jobCands.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] p-6 text-center text-xs font-semibold text-[#64748b]">
+                            Aucune candidature n&apos;a encore été déposée pour cette offre.
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {jobCands.map((c) => {
+                              const candUser = c.candidat?.user;
+                              const prenom = c.candidat?.prenom || candUser?.prenom || 'Candidat';
+                              const nom = c.candidat?.nom || candUser?.nom || '';
+                              const resolvedCv = resolveDepositedCv(c);
+                              const cvNom = (resolvedCv?.nom_fichier || '').toLowerCase();
+                              const isNonConforme =
+                                c.analyse?.score_correspondance === 0 ||
+                                cvNom.includes('tp_') ||
+                                cvNom.includes('tp-') ||
+                                cvNom.includes('cours') ||
+                                cvNom.includes('facture') ||
+                                cvNom.includes('enonce') ||
+                                (c.analyse?.resume && c.analyse.resume.toLowerCase().includes('document non conforme'));
+                              const score = isNonConforme ? 0 : (c.analyse?.score_correspondance ?? 78);
+
+                              return (
+                                <div
+                                  key={c.id}
+                                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-[#e2e8f0] bg-[#fafbfc] p-3.5 hover:bg-white hover:border-[#cbd5e1] transition"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="grid size-9 shrink-0 place-items-center rounded-full bg-[#eef2ff] text-xs font-black text-[#594be0]">
+                                      {prenom[0]}
+                                      {nom[0] || ''}
+                                    </div>
+                                    <div>
+                                      <div className="font-bold text-xs text-[#0f172a]">
+                                        {prenom} {nom}
+                                      </div>
+                                      <div className="text-[11px] text-[#64748b] flex flex-wrap items-center gap-2">
+                                        <span>{candUser?.email || 'candidat@talenta.tn'}</span>
+                                        <span>•</span>
+                                        <span>Postulé le {formatFrenchDate(c.created_at)}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    {/* Statut */}
+                                    <span
+                                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                                        c.statut === 'RECUE'
+                                          ? 'bg-[#f1f5f9] text-[#475569]'
+                                          : c.statut === 'EN_EXAMEN'
+                                          ? 'bg-[#eff6ff] text-[#2563eb]'
+                                          : c.statut === 'PRESELECTIONNEE'
+                                          ? 'bg-[#ecfdf5] text-[#059669]'
+                                          : c.statut === 'ENTRETIEN'
+                                          ? 'bg-[#fffbeb] text-[#d97706]'
+                                          : c.statut === 'ACCEPTEE'
+                                          ? 'bg-[#ecfdf5] text-[#059669]'
+                                          : 'bg-[#fef2f2] text-[#dc2626]'
+                                      }`}
+                                    >
+                                      {c.statut}
+                                    </span>
+
+                                    {/* Score IA */}
+                                    <span
+                                      className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold ${
+                                        score === 0
+                                          ? 'border border-[#fecaca] bg-[#fef2f2] text-[#dc2626]'
+                                          : score >= 80
+                                          ? 'border border-[#bbf7d0] bg-[#ecfdf5] text-[#059669]'
+                                          : score >= 65
+                                          ? 'border border-[#bfdbfe] bg-[#eff6ff] text-[#2563eb]'
+                                          : 'border border-[#fde68a] bg-[#fffbeb] text-[#d97706]'
+                                      }`}
+                                    >
+                                      <Sparkles size={11} />
+                                      <span>{score === 0 ? 'Invalide (0%)' : `IA : ${score}%`}</span>
+                                    </span>
+
+                                    {/* Fichier CV */}
+                                    <button
+                                      type="button"
+                                      onClick={() => downloadCandidateCvFile(c)}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-[#e2e8f0] bg-white px-2 py-1 text-[11px] font-semibold text-[#475569] hover:bg-[#f1f5f9]"
+                                      title="Télécharger le CV déposé"
+                                    >
+                                      <Download size={11} />
+                                      <span className="max-w-[100px] truncate">{resolvedCv?.nom_fichier || 'CV.pdf'}</span>
+                                    </button>
+
+                                    {/* Décider / Évaluer */}
+                                    {onOpenCandidatureDetail && (
+                                      <button
+                                        type="button"
+                                        onClick={() => onOpenCandidatureDetail(c)}
+                                        className="inline-flex items-center gap-1 rounded-lg bg-[#594be0] px-3 py-1 text-xs font-bold text-white hover:bg-[#483ad3] transition cursor-pointer"
+                                      >
+                                        <span>Évaluer</span>
+                                        <ChevronRight size={12} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}

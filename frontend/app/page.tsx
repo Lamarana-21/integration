@@ -1593,7 +1593,52 @@ export default function AppRoot() {
     setCandidatures((prev) =>
       prev.map((c) => {
         if (c.id === candId) {
-          const candSkills = c.candidat?.competences || [];
+          const cvNom = (c.cv?.nom_fichier || '').toLowerCase();
+          const prevResume = (c.analyse?.resume || '').toLowerCase();
+          const isNonConforme =
+            c.analyse?.score_correspondance === 0 ||
+            cvNom.includes('tp_') ||
+            cvNom.includes('tp-') ||
+            cvNom.includes('cours') ||
+            cvNom.includes('facture') ||
+            cvNom.includes('enonce') ||
+            prevResume.includes('document non conforme');
+
+          if (isNonConforme) {
+            const nonConformeAnalyse: import('@/lib/types').AnalyseCv = {
+              id: c.analyse?.id || `ana-${Date.now()}`,
+              cv_id: c.cv_id,
+              candidature_id: c.id,
+              score_correspondance: 0,
+              niveau_confiance: 'FAIBLE',
+              version_modele: 'Gemini-3.8-Flash / ATS-Strict',
+              valide_par_recruteur: true,
+              resume: `Document non conforme : Le fichier « ${c.cv?.nom_fichier || 'Fichier'} » ne possède pas la structure d'un curriculum vitæ. Le document déposé est un document académique/administratif et non un profil professionnel.`,
+              points_forts: [],
+              points_manquants: [
+                "Document non reconnu comme un curriculum vitæ (score: 0%).",
+                "Aucune compétence technique validée pour l'offre.",
+                "Veuillez demander au candidat de déposer un véritable CV professionnel."
+              ],
+              infos_extraites: {
+                competences: [],
+                experiences: [],
+                formations: [],
+                langues: [],
+              },
+            };
+
+            const up = {
+              ...c,
+              analyse: nonConformeAnalyse,
+            };
+            updatedCand = up;
+            return up;
+          }
+
+          const candSkills = c.analyse?.infos_extraites?.competences && c.analyse.infos_extraites.competences.length > 0
+            ? c.analyse.infos_extraites.competences
+            : (c.candidat?.competences || []);
           const reqSkills = c.offre?.competences_requises || ['React', 'Node.js', 'SQL'];
           const matching = reqSkills.filter((r) =>
             candSkills.some(
@@ -1610,7 +1655,7 @@ export default function AppRoot() {
             candidature_id: c.id,
             score_correspondance: calculatedScore,
             niveau_confiance: calculatedScore >= 80 ? 'ELEVE' : calculatedScore >= 65 ? 'MOYEN' : 'FAIBLE',
-            version_modele: 'Talenta-AI-v2.1',
+            version_modele: 'Gemini-3.8-Flash / ATS-Strict',
             valide_par_recruteur: true,
             resume: `Nouvelle analyse IA du CV (${c.cv?.nom_fichier || 'Profil'}). Adéquation technique calculée à ${calculatedScore}% pour le poste « ${c.offre?.titre || 'Offre'} ». ${matching.length}/${reqSkills.length} compétences requises validées.`,
             points_forts: [
@@ -2057,6 +2102,10 @@ export default function AppRoot() {
               onEditJob={(job) => setEditingOffre(job)}
               onCloseJob={handleCloseJob}
               onDeleteJob={handleDeleteJob}
+              onOpenCandidatureDetail={(cand) => {
+                setSelectedCandidatureForDetail(cand);
+                handleNavigate('E10');
+              }}
             />
           )}
 

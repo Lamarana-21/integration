@@ -153,18 +153,40 @@ export function FicheCandidatIaView({
       cv?.nom_fichier?.includes('Dynamique'));
 
   const requiredSkills = offre?.competences_requises || ['React', 'Node.js', 'SQL'];
-  const candidateSkills =
-    candidat?.competences || analyse?.infos_extraites?.competences || [];
+  
+  // Si le document est un document non conforme (score 0, mot-clé TP/cours/facture ou mention dans le résumé)
+  const cvNom = (cv?.nom_fichier || '').toLowerCase();
+  const isNonConformeDoc =
+    analyse?.score_correspondance === 0 ||
+    cvNom.includes('tp_') ||
+    cvNom.includes('tp-') ||
+    cvNom.includes('cours') ||
+    cvNom.includes('facture') ||
+    cvNom.includes('enonce') ||
+    (analyse?.resume && analyse.resume.toLowerCase().includes('document non conforme'));
 
-  const matchedSkills = requiredSkills.filter((req) =>
-    candidateSkills.some(
-      (cs) =>
-        cs.toLowerCase().includes(req.toLowerCase()) ||
-        req.toLowerCase().includes(cs.toLowerCase())
-    )
-  );
-  const missingSkills = requiredSkills.filter((req) => !matchedSkills.includes(req));
-  const score = analyse?.score_correspondance || 85;
+  const candidateSkills = isNonConformeDoc
+    ? []
+    : (analyse?.infos_extraites?.competences && analyse.infos_extraites.competences.length > 0
+        ? analyse.infos_extraites.competences
+        : (candidat?.competences || []));
+
+  const matchedSkills = isNonConformeDoc
+    ? []
+    : requiredSkills.filter((req) =>
+        candidateSkills.some(
+          (cs) =>
+            cs.toLowerCase().includes(req.toLowerCase()) ||
+            req.toLowerCase().includes(cs.toLowerCase())
+        )
+      );
+  const missingSkills = isNonConformeDoc
+    ? requiredSkills
+    : requiredSkills.filter((req) => !matchedSkills.includes(req));
+
+  const score = isNonConformeDoc
+    ? 0
+    : (analyse?.score_correspondance ?? 78);
 
   const prenom = candidat?.prenom || user?.prenom || 'Candidat';
   const nom = candidat?.nom || user?.nom || '';
@@ -794,14 +816,16 @@ export function FicheCandidatIaView({
                 </div>
                 <div
                   className={`rounded-xl px-4 py-2 text-xl font-black ${
-                    score >= 80
+                    score === 0
+                      ? 'bg-[#fef2f2] text-[#dc2626] border border-[#fecaca]'
+                      : score >= 80
                       ? 'bg-[#ecfdf5] text-[#059669]'
                       : score >= 65
                       ? 'bg-[#eff6ff] text-[#2563eb]'
                       : 'bg-[#fffbeb] text-[#d97706]'
                   }`}
                 >
-                  {score}%
+                  {score}% {score === 0 ? '· Document Invalide' : ''}
                 </div>
               </div>
 
@@ -817,52 +841,63 @@ export function FicheCandidatIaView({
               </div>
 
               {/* Compétences validées vs manquantes */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] p-3.5">
-                  <div className="text-xs font-bold text-[#166534] mb-2">
-                    Compétences requises détectées ({matchedSkills.length}/{requiredSkills.length})
+              {isNonConformeDoc ? (
+                <div className="rounded-xl border border-[#fecaca] bg-[#fff5f5] p-4 text-xs">
+                  <div className="font-extrabold text-[#dc2626] mb-1">
+                    Document non conforme détecté (Score : 0%)
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {matchedSkills.length > 0 ? (
-                      matchedSkills.map((s, i) => (
-                        <span
-                          key={i}
-                          className="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-[#15803d] border border-[#bbf7d0]"
-                        >
-                          ✓ {s}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-[#64748b]">Aucune correspondance directe</span>
-                    )}
-                  </div>
+                  <p className="text-[#991b1b] leading-relaxed">
+                    Le fichier importé n&apos;étant pas un curriculum vitæ professionnel, aucune compétence requise n&apos;a été validée pour cette offre.
+                  </p>
                 </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] p-3.5">
+                    <div className="text-xs font-bold text-[#166534] mb-2">
+                      Compétences requises détectées ({matchedSkills.length}/{requiredSkills.length})
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {matchedSkills.length > 0 ? (
+                        matchedSkills.map((s, i) => (
+                          <span
+                            key={i}
+                            className="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-[#15803d] border border-[#bbf7d0]"
+                          >
+                            ✓ {s}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-[#64748b]">Aucune correspondance directe</span>
+                      )}
+                    </div>
+                  </div>
 
-                <div className="rounded-xl border border-[#fed7aa] bg-[#fff7ed] p-3.5">
-                  <div className="text-xs font-bold text-[#9a3412] mb-2">
-                    Compétences à vérifier en entretien ({missingSkills.length})
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {missingSkills.length > 0 ? (
-                      missingSkills.map((s, i) => (
-                        <span
-                          key={i}
-                          className="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-[#c2410c] border border-[#fed7aa]"
-                        >
-                          {s}
+                  <div className="rounded-xl border border-[#fed7aa] bg-[#fff7ed] p-3.5">
+                    <div className="text-xs font-bold text-[#9a3412] mb-2">
+                      Compétences à vérifier en entretien ({missingSkills.length})
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {missingSkills.length > 0 ? (
+                        missingSkills.map((s, i) => (
+                          <span
+                            key={i}
+                            className="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-[#c2410c] border border-[#fed7aa]"
+                          >
+                            {s}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs font-semibold text-[#15803d]">
+                          Tous les prérequis sont couverts
                         </span>
-                      ))
-                    ) : (
-                      <span className="text-xs font-semibold text-[#15803d]">
-                        Tous les prérequis sont couverts
-                      </span>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Points forts */}
-              {analyse?.points_forts && analyse.points_forts.length > 0 && (
+              {!isNonConformeDoc && analyse?.points_forts && analyse.points_forts.length > 0 && (
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-[#475569] mb-1.5">
                     Points clés identifiés

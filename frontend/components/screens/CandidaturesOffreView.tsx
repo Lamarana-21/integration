@@ -598,9 +598,26 @@ export function CandidaturesOffreView({
       return true;
     });
 
-    return [...list].sort(
-      (a, b) => (b.analyse?.score_correspondance || 0) - (a.analyse?.score_correspondance || 0)
-    );
+    return [...list].sort((a, b) => {
+      // 1. Statut RECUE (nouvelles candidatures postulées) toujours en haut
+      const aIsRecue = a.statut === 'RECUE' ? 1 : 0;
+      const bIsRecue = b.statut === 'RECUE' ? 1 : 0;
+      if (bIsRecue !== aIsRecue) {
+        return bIsRecue - aIsRecue;
+      }
+
+      // 2. Par date de candidature décroissante (les plus récentes en haut)
+      const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (dateB !== dateA) {
+        return dateB - dateA;
+      }
+
+      // 3. Enfin par score IA
+      const scoreA = a.analyse?.score_correspondance ?? 0;
+      const scoreB = b.analyse?.score_correspondance ?? 0;
+      return scoreB - scoreA;
+    });
   }, [scopedByOffre, filterStatut, search]);
 
   const toggleSelectAll = () => {
@@ -826,7 +843,18 @@ export function CandidaturesOffreView({
                     (resolvedCv?.source_type === 'DYNAMIQUE' ||
                       resolvedCv?.est_genere ||
                       resolvedCv?.nom_fichier?.includes('Dynamique'));
-                  const score = c.analyse?.score_correspondance || 78;
+
+                  const cvNom = (resolvedCv?.nom_fichier || '').toLowerCase();
+                  const isNonConforme =
+                    c.analyse?.score_correspondance === 0 ||
+                    cvNom.includes('tp_') ||
+                    cvNom.includes('tp-') ||
+                    cvNom.includes('cours') ||
+                    cvNom.includes('facture') ||
+                    cvNom.includes('enonce') ||
+                    (c.analyse?.resume && c.analyse.resume.toLowerCase().includes('document non conforme'));
+
+                  const score = isNonConforme ? 0 : (c.analyse?.score_correspondance ?? 78);
 
                   return (
                     <tr key={c.id} className="hover:bg-[#f8fafc] transition">
@@ -900,7 +928,9 @@ export function CandidaturesOffreView({
                           type="button"
                           onClick={() => setAiModalCand(c)}
                           className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition ${
-                            score >= 80
+                            score === 0
+                              ? 'border-[#fecaca] bg-[#fef2f2] text-[#dc2626] hover:bg-[#fee2e2]'
+                              : score >= 80
                               ? 'border-[#bbf7d0] bg-[#ecfdf5] text-[#059669] hover:bg-[#d1fae5]'
                               : score >= 65
                               ? 'border-[#bfdbfe] bg-[#eff6ff] text-[#2563eb] hover:bg-[#dbeafe]'
@@ -908,7 +938,9 @@ export function CandidaturesOffreView({
                           }`}
                         >
                           <Sparkles size={13} />
-                          <span>Voir analyse IA ({score}%)</span>
+                          <span>
+                            {score === 0 ? 'Document Invalide (0%)' : `Voir analyse IA (${score}%)`}
+                          </span>
                         </button>
                       </td>
 
@@ -991,20 +1023,37 @@ export function CandidaturesOffreView({
 
       {/* MODALE RÉSULTAT DE L'ANALYSE IA (CALCULÉE EN ARRIÈRE-PLAN) */}
       {aiModalCand && (() => {
-        const score = aiModalCand.analyse?.score_correspondance || 78;
+        const resolvedCv = resolveDepositedCv(aiModalCand);
+        const cvNom = (resolvedCv?.nom_fichier || '').toLowerCase();
+        const isNonConforme =
+          aiModalCand.analyse?.score_correspondance === 0 ||
+          cvNom.includes('tp_') ||
+          cvNom.includes('tp-') ||
+          cvNom.includes('cours') ||
+          cvNom.includes('facture') ||
+          cvNom.includes('enonce') ||
+          (aiModalCand.analyse?.resume &&
+            aiModalCand.analyse.resume.toLowerCase().includes('document non conforme'));
+
+        const score = isNonConforme ? 0 : (aiModalCand.analyse?.score_correspondance ?? 78);
         const reqSkills = aiModalCand.offre?.competences_requises || ['React', 'Node.js', 'SQL'];
-        const candSkills =
-          aiModalCand.candidat?.competences ||
-          aiModalCand.analyse?.infos_extraites?.competences ||
-          [];
-        const matched = reqSkills.filter((r) =>
-          candSkills.some(
-            (cs) =>
-              cs.toLowerCase().includes(r.toLowerCase()) ||
-              r.toLowerCase().includes(cs.toLowerCase())
-          )
-        );
-        const missing = reqSkills.filter((r) => !matched.includes(r));
+        const candSkills = isNonConforme
+          ? []
+          : (aiModalCand.analyse?.infos_extraites?.competences &&
+             aiModalCand.analyse.infos_extraites.competences.length > 0
+              ? aiModalCand.analyse.infos_extraites.competences
+              : (aiModalCand.candidat?.competences || []));
+
+        const matched = isNonConforme
+          ? []
+          : reqSkills.filter((r) =>
+              candSkills.some(
+                (cs) =>
+                  cs.toLowerCase().includes(r.toLowerCase()) ||
+                  r.toLowerCase().includes(cs.toLowerCase())
+              )
+            );
+        const missing = isNonConforme ? reqSkills : reqSkills.filter((r) => !matched.includes(r));
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
@@ -1039,59 +1088,82 @@ export function CandidaturesOffreView({
                       Analyse automatique effectuée en arrière-plan.
                     </div>
                   </div>
-                  <div className="rounded-xl bg-[#eef2ff] px-4 py-2 text-xl font-black text-[#4f46e5]">
-                    {score}%
+                  <div
+                    className={`rounded-xl px-4 py-2 text-xl font-black ${
+                      score === 0
+                        ? 'bg-[#fef2f2] text-[#dc2626] border border-[#fecaca]'
+                        : score >= 80
+                        ? 'bg-[#ecfdf5] text-[#059669]'
+                        : score >= 65
+                        ? 'bg-[#eff6ff] text-[#2563eb]'
+                        : 'bg-[#fffbeb] text-[#d97706]'
+                    }`}
+                  >
+                    {score}% {score === 0 ? '· Invalide' : ''}
                   </div>
                 </div>
 
                 <p className="rounded-xl border border-[#e2e8f0] bg-white p-3.5 text-xs leading-relaxed text-[#334155]">
                   {aiModalCand.analyse?.resume ||
-                    `Ce profil couvre ${matched.length} sur ${reqSkills.length} compétences requises pour le poste.`}
+                    (isNonConforme
+                      ? `Document non conforme : Le fichier fourni ne constitue pas un curriculum vitæ.`
+                      : `Ce profil couvre ${matched.length} sur ${reqSkills.length} compétences requises pour le poste.`)}
                 </p>
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] p-3">
-                    <div className="text-[11px] font-bold text-[#166534] mb-1.5">
-                      Compétences validées ({matched.length}/{reqSkills.length})
+                {isNonConforme ? (
+                  <div className="rounded-xl border border-[#fecaca] bg-[#fff5f5] p-3.5 text-xs">
+                    <div className="font-extrabold text-[#dc2626] mb-1">
+                      Fichier non conforme aux normes de recrutement
                     </div>
-                    <div className="flex flex-wrap gap-1">
-                      {matched.length > 0 ? (
-                        matched.map((s, i) => (
-                          <span
-                            key={i}
-                            className="rounded bg-white px-2 py-0.5 text-[11px] font-bold text-[#15803d] border border-[#bbf7d0]"
-                          >
-                            ✓ {s}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-[11px] text-[#64748b]">Aucune correspondance</span>
-                      )}
-                    </div>
+                    <p className="text-[#991b1b]">
+                      Le document téléchargé n&apos;est pas un curriculum vitæ (score 0%). Aucune compétence requise n&apos;est validée.
+                    </p>
                   </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] p-3">
+                      <div className="text-[11px] font-bold text-[#166534] mb-1.5">
+                        Compétences validées ({matched.length}/{reqSkills.length})
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {matched.length > 0 ? (
+                          matched.map((s, i) => (
+                            <span
+                              key={i}
+                              className="rounded bg-white px-2 py-0.5 text-[11px] font-bold text-[#15803d] border border-[#bbf7d0]"
+                            >
+                              ✓ {s}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[11px] text-[#64748b]">Aucune correspondance</span>
+                        )}
+                      </div>
+                    </div>
 
-                  <div className="rounded-xl border border-[#fed7aa] bg-[#fff7ed] p-3">
-                    <div className="text-[11px] font-bold text-[#9a3412] mb-1.5">
-                      À vérifier en entretien ({missing.length})
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {missing.length > 0 ? (
-                        missing.map((s, i) => (
-                          <span
-                            key={i}
-                            className="rounded bg-white px-2 py-0.5 text-[11px] font-bold text-[#c2410c] border border-[#fed7aa]"
-                          >
-                            {s}
+                    <div className="rounded-xl border border-[#fed7aa] bg-[#fff7ed] p-3">
+                      <div className="text-[11px] font-bold text-[#9a3412] mb-1.5">
+                        À vérifier en entretien ({missing.length})
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {missing.length > 0 ? (
+                          missing.map((s, i) => (
+                            <span
+                              key={i}
+                              className="rounded bg-white px-2 py-0.5 text-[11px] font-bold text-[#c2410c] border border-[#fed7aa]"
+                            >
+                              {s}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[11px] font-semibold text-[#15803d]">
+                            Tous les prérequis sont couverts
                           </span>
-                        ))
-                      ) : (
-                        <span className="text-[11px] font-semibold text-[#15803d]">
-                          Tous les prérequis sont couverts
-                        </span>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div className="flex justify-end gap-2 border-t border-[#e2e8f0] pt-4">
                   <button
