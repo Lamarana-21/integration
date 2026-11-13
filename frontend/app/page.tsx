@@ -77,7 +77,7 @@ interface StoredDecision {
   updated_at?: string;
 }
 
-export function computeSequentialSteps(
+function computeSequentialSteps(
   prevStatut: ApplicationStatus,
   prevValidated: ApplicationStatus[] | undefined,
   newStatus: ApplicationStatus
