@@ -156,14 +156,46 @@ function readFileAsBase64(file: File): Promise<{ base64: string; dataUrl: string
 function saveDepositedCvToStorage(keys: string[], cv: import('@/lib/types').CV) {
   if (typeof window === 'undefined' || !cv) return;
   try {
+    const validKeys = keys.filter(Boolean);
+    if (validKeys.length === 0) return;
+
     const raw = localStorage.getItem(DEPOSITED_CVS_STORAGE_KEY);
-    const map: Record<string, import('@/lib/types').CV> = raw ? JSON.parse(raw) : {};
-    keys.filter(Boolean).forEach((k) => {
-      map[k] = cv;
+    let map: Record<string, any> = raw ? JSON.parse(raw) : {};
+
+    // Utiliser une clé primaire pour stocker l'objet CV lourd une seule fois
+    const primaryKey = cv.id || validKeys[0];
+
+    // Nettoyer si la map accumule trop de clés (> 20) pour préserver le quota
+    const storedKeys = Object.keys(map);
+    if (storedKeys.length > 20) {
+      map = {};
+    }
+
+    // Stocker le CV complet avec base64 sous la clé primaire
+    map[primaryKey] = cv;
+
+    // Pour les autres clés d'alias, stocker une référence légère (évite de dupliquer le base64 6 fois !)
+    validKeys.forEach((k) => {
+      if (k !== primaryKey) {
+        map[k] = { __ref: primaryKey, id: cv.id, nom_fichier: cv.nom_fichier };
+      }
     });
-    localStorage.setItem(DEPOSITED_CVS_STORAGE_KEY, JSON.stringify(map));
+
+    try {
+      localStorage.setItem(DEPOSITED_CVS_STORAGE_KEY, JSON.stringify(map));
+    } catch {
+      // Si le quota de 5Mo du navigateur est saturé par d'anciens fichiers, ne garder que ce dernier CV
+      map = { [primaryKey]: cv };
+      validKeys.forEach((k) => {
+        if (k !== primaryKey) {
+          map[k] = { __ref: primaryKey, id: cv.id, nom_fichier: cv.nom_fichier };
+        }
+      });
+      localStorage.setItem(DEPOSITED_CVS_STORAGE_KEY, JSON.stringify(map));
+    }
   } catch (e) {
-    console.warn('Stockage local CV volumineux ignoré:', e);
+    // Si un PDF individuel dépasse à lui seul le quota strict de 5Mo, on évite tout crash
+    console.warn('Stockage local CV volumineux ignoré (limite navigateur atteinte):', e);
   }
 }
 
@@ -183,7 +215,7 @@ function hydrateCandidaturesWithDepositedCvs(cands: Candidature[]): Candidature[
         .trim();
       const offreTitleKey = (c.offre?.titre || '').toLowerCase().trim();
 
-      const cvMatch =
+      let cvMatch =
         cvMap[c.id] ||
         (c.cv_id ? cvMap[c.cv_id] : undefined) ||
         cvMap[`${c.candidat_id}_${c.offre_id}`] ||
@@ -191,6 +223,10 @@ function hydrateCandidaturesWithDepositedCvs(cands: Candidature[]): Candidature[
         (candidateEmail ? cvMap[`${candidateEmail}_${c.offre_id}`] : undefined) ||
         (candidateEmail && offreTitleKey ? cvMap[`${candidateEmail}_${offreTitleKey}`] : undefined) ||
         (candidateFullName && offreTitleKey ? cvMap[`${candidateFullName}_${offreTitleKey}`] : undefined);
+
+      if (cvMatch && (cvMatch as any).__ref && cvMap[(cvMatch as any).__ref]) {
+        cvMatch = cvMap[(cvMatch as any).__ref];
+      }
 
       const decMatch =
         decMap[c.id] ||
