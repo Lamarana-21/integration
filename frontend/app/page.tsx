@@ -1908,6 +1908,10 @@ export default function AppRoot() {
   // Calcul du nombre d'offres favorites uniques pour la sidebar et l'en-tête (évite les doublons d'alias)
   const uniqueFavorisCount = useMemo(() => {
     if (!favorisOffresIds || favorisOffresIds.length === 0) return 0;
+    // Compter uniquement les offres réellement existantes et en favoris (identique à l'écran "Offres favorites")
+    if (offres.length > 0) {
+      return offres.filter((o) => isJobFavorited(o.id, favorisOffresIds)).length;
+    }
     const seen = new Set<string>();
     for (const rawId of favorisOffresIds) {
       const clean = String(rawId).trim().toLowerCase();
@@ -1919,7 +1923,7 @@ export default function AppRoot() {
       }
     }
     return seen.size;
-  }, [favorisOffresIds]);
+  }, [favorisOffresIds, offres]);
   const candidateApplications = useMemo(() => {
     if (!currentUser) return [];
 
