@@ -2,7 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\CandidatureDejaExistanteException;
+use App\Exceptions\LimiteCandidaturesActivesException;
+use App\Exceptions\OffreFermeeOuExpireeException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\PostulerCandidatureRequest;
+use App\Models\Candidat;
 use App\Models\Candidature;
 use App\Models\Cv;
 use App\Models\NoteInterne;
@@ -10,6 +15,7 @@ use App\Models\Notification;
 use App\Models\Offre;
 use App\Models\User;
 use App\Services\AiCvAnalysisService;
+use App\Services\CandidatureService;
 use App\Services\NotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -20,11 +26,16 @@ class CandidatureController extends Controller
 {
     protected AiCvAnalysisService $aiService;
     protected NotificationService $notificationService;
+    protected CandidatureService $candidatureService;
 
-    public function __construct(AiCvAnalysisService $aiService, NotificationService $notificationService)
-    {
+    public function __construct(
+        AiCvAnalysisService $aiService,
+        NotificationService $notificationService,
+        CandidatureService $candidatureService
+    ) {
         $this->aiService = $aiService;
         $this->notificationService = $notificationService;
+        $this->candidatureService = $candidatureService;
     }
 
     /**
@@ -44,11 +55,9 @@ class CandidatureController extends Controller
     }
 
     /**
-     * Module 7.1, 7.2, 7.3 : Postuler à une offre
-     * RM1 : Offre doit être PUBLIEE et date_limite non dépassée
-     * RM2 : Empêcher une double candidature à la même offre
+     * Résout l'instance de Candidat associée à la requête.
      */
-    public function postuler(Request $request, string $offreId): JsonResponse
+    protected function resoudreCandidat(Request $request): ?Candidat
     {
         $user = $request->user();
         if (!$user && $request->header('X-User-Id')) {
@@ -58,171 +67,143 @@ class CandidatureController extends Controller
             $user = User::find($request->user_id);
         }
         if (!$user && $request->filled('candidat_id')) {
-            $c = \App\Models\Candidat::find($request->candidat_id);
+            $c = Candidat::find($request->candidat_id);
             if ($c) {
-                $user = $c->user ?: User::find($c->utilisateur_id);
+                return $c;
             }
         }
         if (!$user) {
             $user = User::whereHas('role', fn($q) => $q->where('nom', 'CANDIDAT'))->first();
         }
 
-        $candidat = null;
         if ($user) {
-            $candidat = $user->candidat ?: \App\Models\Candidat::where('utilisateur_id', $user->id)->first();
+            $candidat = $user->candidat ?: Candidat::where('utilisateur_id', $user->id)->first();
             if (!$candidat) {
-                $candidat = \App\Models\Candidat::create([
+                $candidat = Candidat::create([
                     'utilisateur_id' => $user->id,
                     'nom' => $user->nom,
                     'prenom' => $user->prenom,
                 ]);
             }
+            return $candidat;
         }
 
+        if ($request->filled('candidat_id')) {
+            return Candidat::find($request->candidat_id);
+        }
+
+        return Candidat::first();
+    }
+
+    /**
+     * Endpoint API standardisé ATS : POST /offres/{id}/candidatures
+     * Valide les données et applique la logique métier via CandidatureService.
+     * Codes HTTP :
+     * - 201 Created : Candidature enregistrée
+     * - 404 Not Found : Offre introuvable
+     * - 409 Conflict : Candidature déjà existante pour cette offre (doublon)
+     * - 422 Unprocessable Content : Offre expirée/fermée ou quota actif atteint
+     */
+    public function postulerViaService(PostulerCandidatureRequest $request, string $id): JsonResponse
+    {
+        $offre = Offre::with('entreprise')->find($id);
+        if (!$offre) {
+            return response()->json([
+                'message' => 'Offre d\'emploi introuvable.',
+                'error_code' => 'OFFRE_INTROUVABLE',
+            ], 404);
+        }
+
+        $candidat = $this->resoudreCandidat($request);
         if (!$candidat) {
-            if ($request->filled('candidat_id')) {
-                $candidat = \App\Models\Candidat::find($request->candidat_id);
-            }
-            if (!$candidat) {
-                $candidat = \App\Models\Candidat::first();
-            }
+            return response()->json([
+                'message' => 'Profil candidat introuvable. Veuillez vous identifier ou compléter votre profil.',
+                'error_code' => 'CANDIDAT_INTROUVABLE',
+            ], 422);
         }
 
+        try {
+            $candidature = $this->candidatureService->postuler($candidat, $offre, $request->all());
+
+            return response()->json([
+                'message' => 'Candidature enregistrée avec succès.',
+                'candidature' => $candidature->load(['offre.entreprise', 'candidat.user', 'cv', 'analyse']),
+            ], 201);
+        } catch (CandidatureDejaExistanteException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'error_code' => 'CANDIDATURE_DEJA_EXISTANTE',
+                'details' => $e->getPayload(),
+            ], 409);
+        } catch (LimiteCandidaturesActivesException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'error_code' => 'LIMITE_CANDIDATURES_ACTIVES_ATTEINTE',
+                'details' => $e->getPayload(),
+            ], 422);
+        } catch (OffreFermeeOuExpireeException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'error_code' => 'OFFRE_FERMEE_OU_EXPIREE',
+                'details' => $e->getPayload(),
+            ], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Une erreur est survenue lors de l\'enregistrement de votre candidature: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Endpoint API existant /jobs/{id}/applications (rétro-compatible frontend)
+     * Délégué à CandidatureService pour garantir la cohérence des règles métier.
+     */
+    public function postuler(Request $request, string $offreId): JsonResponse
+    {
+        $offre = Offre::with('entreprise')->find($offreId);
+        if (!$offre) {
+            return response()->json(['message' => 'Offre d\'emploi introuvable.'], 404);
+        }
+
+        $candidat = $this->resoudreCandidat($request);
         if (!$candidat) {
             return response()->json(['message' => 'Profil candidat introuvable. Veuillez compléter votre profil.'], 403);
         }
 
-        $offre = Offre::findOrFail($offreId);
+        try {
+            $candidature = $this->candidatureService->postuler($candidat, $offre, $request->all());
 
-        // RM1 Check : Date limite dépassée ou offre non publiée
-        if ($offre->statut !== 'PUBLIEE') {
             return response()->json([
-                'message' => 'Cette offre n\'est plus disponible (statut: ' . $offre->statut . ').',
-            ], 422);
-        }
-
-        if ($offre->date_limite && Carbon::parse($offre->date_limite)->endOfDay()->isPast()) {
+                'message' => 'Candidature enregistrée avec succès dans la base de données',
+                'candidature' => $candidature->load(['offre.entreprise', 'candidat.user', 'cv', 'analyse']),
+            ], 201);
+        } catch (CandidatureDejaExistanteException $e) {
+            $alreadyApplied = Candidature::where('candidat_id', $candidat->id)->where('offre_id', $offre->id)->first();
             return response()->json([
-                'message' => 'La date limite pour postuler à cette offre est dépassée (' . Carbon::parse($offre->date_limite)->format('d/m/Y') . '). Les candidatures sont closes.',
-                'expired' => true,
-            ], 422);
-        }
-
-        // RM2 Check : Double candidature interdite pour le même candidat
-        $alreadyApplied = Candidature::where('candidat_id', $candidat->id)
-            ->where('offre_id', $offre->id)
-            ->first();
-
-        if ($alreadyApplied) {
-            return response()->json([
-                'message' => 'Vous avez déjà postulé à cette offre. Une seconde candidature n\'est pas autorisée.',
+                'message' => $e->getMessage(),
                 'already_applied' => true,
-                'candidature' => $alreadyApplied->load(['offre.entreprise', 'candidat.user', 'cv', 'analyse']),
+                'error_code' => 'CANDIDATURE_DEJA_EXISTANTE',
+                'candidature' => $alreadyApplied ? $alreadyApplied->load(['offre.entreprise', 'candidat.user', 'cv', 'analyse']) : null,
             ], 422);
+        } catch (LimiteCandidaturesActivesException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'limit_exceeded' => true,
+                'error_code' => 'LIMITE_CANDIDATURES_ACTIVES_ATTEINTE',
+                'details' => $e->getPayload(),
+            ], 422);
+        } catch (OffreFermeeOuExpireeException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'expired' => true,
+                'error_code' => 'OFFRE_FERMEE_OU_EXPIREE',
+                'details' => $e->getPayload(),
+            ], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Une erreur est survenue lors de l\'enregistrement de votre candidature: ' . $e->getMessage(),
+            ], 500);
         }
-
-        $cvId = $request->input('cv_id');
-        $existingCv = $cvId ? Cv::find($cvId) : null;
-
-        if (!$existingCv) {
-            $cvPayload = $request->input('cv_payload', []);
-            if (!empty($cvPayload) && (!empty($cvPayload['contenu_base64']) || !empty($cvPayload['nom_fichier']))) {
-                $existingCv = Cv::create([
-                    'candidat_id' => $candidat->id,
-                    'nom_fichier' => $cvPayload['nom_fichier'] ?? ('CV_' . ($candidat->nom ?: 'Candidat') . '.pdf'),
-                    'type_mime' => $cvPayload['type_mime'] ?? 'application/pdf',
-                    'taille_octets' => $cvPayload['taille_octets'] ?? 2048,
-                    'url_stockage' => $cvPayload['url_stockage'] ?? ('database://cvs/' . \Illuminate\Support\Str::uuid()),
-                    'contenu_base64' => $cvPayload['contenu_base64'] ?? null,
-                ]);
-                $cvId = $existingCv->id;
-            } else {
-                $latestCv = $candidat->cvs()->latest()->first();
-                if ($latestCv) {
-                    $cvId = $latestCv->id;
-                } else {
-                    $cv = Cv::create([
-                        'candidat_id' => $candidat->id,
-                        'nom_fichier' => 'CV_' . ($candidat->nom ?: 'Candidat') . '.pdf',
-                        'type_mime' => 'application/pdf',
-                        'taille_octets' => 1024,
-                        'url_stockage' => 'database://cvs/' . \Illuminate\Support\Str::uuid(),
-                        'contenu_base64' => base64_encode('%PDF-1.4 automatic candidate CV'),
-                    ]);
-                    $cvId = $cv->id;
-                }
-            }
-        }
-
-        $candidature = Candidature::create([
-            'candidat_id' => $candidat->id,
-            'offre_id' => $offre->id,
-            'cv_id' => $cvId,
-            'lettre_motivation' => $request->input('lettre_motivation'),
-            'statut' => 'RECUE',
-            'date_postulation' => Carbon::now(),
-        ]);
-
-        // Lancer analyse IA automatique en arrière-plan
-        try {
-            $cvModel = Cv::find($cvId);
-            if ($cvModel) {
-                $this->aiService->analyser($cvModel, $candidature);
-            }
-        } catch (\Throwable $e) {}
-
-        // Notification automatique pour le recruteur concerné (Module 11.3)
-        try {
-            $recruteurUser = null;
-            if ($offre->auteur_id) {
-                $recruteurUser = User::find($offre->auteur_id);
-            }
-            if (!$recruteurUser && $offre->auteur) {
-                $recruteurUser = $offre->auteur;
-            }
-            if (!$recruteurUser && $offre->entreprise_id) {
-                $recruteurUser = User::where('entreprise_id', $offre->entreprise_id)->first();
-            }
-            if (!$recruteurUser) {
-                $recruteurUser = User::whereHas('role', fn($q) => $q->where('nom', 'RECRUTEUR'))->first();
-            }
-
-            if ($recruteurUser) {
-                $candNom = trim(($candidat->prenom ?? '') . ' ' . ($candidat->nom ?? ''));
-                if (empty($candNom) && $user) {
-                    $candNom = trim($user->prenom . ' ' . $user->nom);
-                }
-                $candNom = $candNom ?: 'Un candidat';
-                $entNom = $offre->entreprise?->nom ?: 'votre entreprise';
-
-                Notification::create([
-                    'utilisateur_id' => $recruteurUser->id,
-                    'type' => 'NOUVELLE_CANDIDATURE',
-                    'objet' => "Nouvelle candidature reçue : {$offre->titre}",
-                    'message' => "Bonjour {$recruteurUser->prenom}, le candidat {$candNom} vient de postuler à votre offre « {$offre->titre} » chez {$entNom}. Son CV et l'évaluation IA de son profil sont disponibles sur votre tableau de bord recruteur.",
-                    'statut_envoi' => 'ENVOYE',
-                ]);
-            }
-        } catch (\Throwable $e) {}
-
-        // Notification de confirmation au candidat (Module 11.1)
-        try {
-            $candUser = $user ?: ($candidat->user ?: User::find($candidat->utilisateur_id));
-            if ($candUser) {
-                Notification::create([
-                    'utilisateur_id' => $candUser->id,
-                    'type' => 'CONFIRMATION_DEPOT',
-                    'objet' => "Confirmation de votre candidature : {$offre->titre}",
-                    'message' => "Bonjour {$candUser->prenom}, votre candidature pour le poste « {$offre->titre} » a été enregistrée avec succès et transmise au recruteur.",
-                    'statut_envoi' => 'ENVOYE',
-                ]);
-            }
-        } catch (\Throwable $e) {}
-
-        return response()->json([
-            'message' => 'Candidature enregistrée avec succès dans la base de données',
-            'candidature' => $candidature->load(['offre.entreprise', 'candidat.user', 'cv', 'analyse']),
-        ], 201);
     }
 
     /**

@@ -18,7 +18,11 @@ return new class extends Migration
         });
 
         // Copier les noms existants depuis users vers candidats
-        \DB::statement("UPDATE candidats c JOIN users u ON c.utilisateur_id = u.id SET c.nom = u.nom, c.prenom = u.prenom");
+        if (\DB::getDriverName() === 'sqlite') {
+            \DB::statement("UPDATE candidats SET nom = (SELECT nom FROM users WHERE users.id = candidats.utilisateur_id), prenom = (SELECT prenom FROM users WHERE users.id = candidats.utilisateur_id)");
+        } else {
+            \DB::statement("UPDATE candidats c JOIN users u ON c.utilisateur_id = u.id SET c.nom = u.nom, c.prenom = u.prenom");
+        }
     }
 
     public function down(): void

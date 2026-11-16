@@ -22,6 +22,11 @@ class Entreprise extends Model
         'description',
         'logo_url',
         'statut',
+        'max_candidatures_actives_par_candidat',
+    ];
+
+    protected $casts = [
+        'max_candidatures_actives_par_candidat' => 'integer',
     ];
 
     public function recruteurs(): HasMany
@@ -32,5 +37,13 @@ class Entreprise extends Model
     public function offres(): HasMany
     {
         return $this->hasMany(Offre::class, 'entreprise_id');
+    }
+
+    /**
+     * Vérifie si l'entreprise a configuré une limite de candidatures actives.
+     */
+    public function hasActiveApplicationsLimit(): bool
+    {
+        return $this->max_candidatures_actives_par_candidat !== null && $this->max_candidatures_actives_par_candidat > 0;
     }
 }

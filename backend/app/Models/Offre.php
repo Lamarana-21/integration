@@ -66,6 +66,15 @@ class Offre extends Model
             return false;
         }
 
-        return Carbon::parse($this->date_limite)->isPast() && !Carbon::parse($this->date_limite)->isToday();
+        return Carbon::parse($this->date_limite)->endOfDay()->isPast();
+    }
+
+    /**
+     * Vérifie si l'offre est actuellement ouverte aux candidatures.
+     */
+    public function isOuverte(): bool
+    {
+        $estPubliee = in_array(strtoupper((string) $this->statut), ['PUBLIEE', 'OUVERTE'], true);
+        return $estPubliee && !$this->isExpired();
     }
 }

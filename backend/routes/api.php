@@ -43,7 +43,10 @@ Route::post('/jobs/{id}/publish', [OffreController::class, 'publish']);
 Route::post('/jobs/{id}/close', [OffreController::class, 'close']);
 Route::delete('/jobs/{id}', [OffreController::class, 'destroy']);
 
-// Candidatures
+// Candidatures (Routes standards ATS & rétro-compatibilité)
+Route::post('/offres/{id}/candidatures', [CandidatureController::class, 'postulerViaService']);
+Route::get('/offres/{id}/candidatures', [CandidatureController::class, 'indexByOffre']);
+
 Route::get('/applications', [CandidatureController::class, 'index']);
 Route::get('/applications/my', [CandidatureController::class, 'mesCandidatures']);
 Route::post('/jobs/{id}/applications', [CandidatureController::class, 'postuler']);

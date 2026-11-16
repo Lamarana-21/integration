@@ -13,6 +13,27 @@ class Candidature extends Model
 {
     use HasFactory, HasUuids;
 
+    public const STATUT_INITIAL = 'RECUE';
+
+    public const STATUTS_ACTIFS = [
+        'RECUE',
+        'EN_EXAMEN',
+        'PRESELECTIONNEE',
+        'ENTRETIEN',
+        'en_attente',
+        'preselectionnee',
+        'entretien',
+    ];
+
+    public const STATUTS_INACTIFS = [
+        'REFUSEE',
+        'RETIREE',
+        'ACCEPTEE',
+        'refusee',
+        'retiree',
+        'acceptee',
+    ];
+
     protected $fillable = [
         'candidat_id',
         'offre_id',
@@ -22,6 +43,24 @@ class Candidature extends Model
         'statut',
         'commentaire_recruteur',
     ];
+
+    public function scopeActives($query)
+    {
+        return $query->whereIn('statut', [
+            'RECUE',
+            'EN_EXAMEN',
+            'PRESELECTIONNEE',
+            'ENTRETIEN',
+            'en_attente',
+            'preselectionnee',
+            'entretien',
+        ]);
+    }
+
+    public function isActive(): bool
+    {
+        return in_array($this->statut, self::STATUTS_ACTIFS, true);
+    }
 
     public function candidat(): BelongsTo
     {
