@@ -279,6 +279,191 @@ function hydrateCandidaturesWithDepositedCvs(cands: Candidature[]): Candidature[
   }
 }
 
+interface PageInfo {
+  code: string;
+  slug: string;
+  title: string;
+  description: string;
+  componentFile: string;
+}
+
+const PAGE_CONFIG: Record<string, PageInfo> = {
+  E1: {
+    code: 'E1',
+    slug: 'offres',
+    title: 'Explorer les offres',
+    description: 'Catalogue public des offres d\'emploi vérifiées et moteur de recherche.',
+    componentFile: 'frontend/components/screens/OffresPubliquesView.tsx',
+  },
+  E3: {
+    code: 'E3',
+    slug: 'detail-offre',
+    title: 'Détail de l\'offre',
+    description: 'Fiche détaillée du poste avec missions, compétences requises et bouton de candidature.',
+    componentFile: 'frontend/components/screens/OffresPubliquesView.tsx',
+  },
+  E_CANDIDAT_DASHBOARD: {
+    code: 'E_CANDIDAT_DASHBOARD',
+    slug: 'tableau-de-bord-candidat',
+    title: 'Tableau de bord Candidat',
+    description: 'Vue d\'ensemble pour le candidat (candidatures, entretiens, messagerie).',
+    componentFile: 'frontend/components/screens/DashboardCandidatView.tsx',
+  },
+  E5: {
+    code: 'E5',
+    slug: 'mes-candidatures',
+    title: 'Mes candidatures',
+    description: 'Suivi en temps réel de toutes les candidatures envoyées et étapes du processus.',
+    componentFile: 'frontend/components/screens/MesCandidaturesView.tsx',
+  },
+  E_ENTRETIENS: {
+    code: 'E_ENTRETIENS',
+    slug: 'mes-entretiens',
+    title: 'Entretiens & Convocations',
+    description: 'Planning des entretiens programmés pour le candidat (visio ou présentiel).',
+    componentFile: 'frontend/components/screens/EntretiensCandidatView.tsx',
+  },
+  E6_PROFIL: {
+    code: 'E6_PROFIL',
+    slug: 'mon-profil',
+    title: 'Mon profil candidat',
+    description: 'Gestion des coordonnées, compétences, expériences et formations du candidat.',
+    componentFile: 'frontend/components/screens/ProfilCandidatView.tsx',
+  },
+  E6: {
+    code: 'E6',
+    slug: 'mon-profil',
+    title: 'Mon profil candidat',
+    description: 'Gestion des coordonnées, compétences, expériences et formations du candidat.',
+    componentFile: 'frontend/components/screens/ProfilCandidatView.tsx',
+  },
+  E6_CV: {
+    code: 'E6_CV',
+    slug: 'mes-cvs',
+    title: 'Mes CV & CV Studio',
+    description: 'Gestionnaire de CV, générateur de CV dynamique et téléversement.',
+    componentFile: 'frontend/components/screens/MesCvsView.tsx',
+  },
+  E7: {
+    code: 'E7',
+    slug: 'tableau-de-bord-recruteur',
+    title: 'Tableau de bord Recruteur',
+    description: 'Statistiques clés de recrutement, métriques d\'activité et actions rapides.',
+    componentFile: 'frontend/components/screens/DashboardRecruteurView.tsx',
+  },
+  E8: {
+    code: 'E8',
+    slug: 'mes-offres',
+    title: 'Mes offres d\'emploi',
+    description: 'Gestion et publication des annonces de recrutement de l\'entreprise.',
+    componentFile: 'frontend/components/screens/NouvelleOffreView.tsx',
+  },
+  E_RECRUTEUR_ENTRETIENS: {
+    code: 'E_RECRUTEUR_ENTRETIENS',
+    slug: 'entretiens-recruteur',
+    title: 'Entretiens Recruteur',
+    description: 'Gestion des rendez-vous et convocations d\'entretiens avec les candidats.',
+    componentFile: 'frontend/components/screens/EntretiensRecruteurView.tsx',
+  },
+  E9: {
+    code: 'E9',
+    slug: 'candidatures',
+    title: 'Candidatures reçues & Analyse IA',
+    description: 'Revue des candidats par offre avec scoring ATS et présélection.',
+    componentFile: 'frontend/components/screens/CandidaturesOffreView.tsx',
+  },
+  E10: {
+    code: 'E10',
+    slug: 'dossier-candidat',
+    title: 'Dossier candidat & Analyse IA',
+    description: 'Dossier complet, CV réel, analyse sémantique et décision du recruteur.',
+    componentFile: 'frontend/components/screens/FicheCandidatIaView.tsx',
+  },
+  E11: {
+    code: 'E11',
+    slug: 'entreprises',
+    title: 'Annuaire des Entreprises',
+    description: 'Répertoire et fiches détaillées des entreprises partenaires.',
+    componentFile: 'frontend/components/screens/EntreprisesDirectoryView.tsx / FicheEntrepriseView.tsx',
+  },
+  E12: {
+    code: 'E12',
+    slug: 'admin-utilisateurs',
+    title: 'Gestion des utilisateurs',
+    description: 'Administration des comptes (candidats, recruteurs, administrateurs).',
+    componentFile: 'frontend/components/screens/AdminUsersView.tsx',
+  },
+  E13: {
+    code: 'E13',
+    slug: 'admin-roles',
+    title: 'Rôles & Permissions',
+    description: 'Matrice RBAC des rôles et autorisations système.',
+    componentFile: 'frontend/components/screens/AdminRolesView.tsx',
+  },
+  E14: {
+    code: 'E14',
+    slug: 'admin-entreprises',
+    title: 'Gestion des entreprises',
+    description: 'Gestion administrative des entreprises enregistrées.',
+    componentFile: 'frontend/components/screens/AdminEntreprisesView.tsx',
+  },
+  E15: {
+    code: 'E15',
+    slug: 'admin-notifications',
+    title: 'Journal des notifications',
+    description: 'Historique des notifications système et alertes e-mail.',
+    componentFile: 'frontend/components/screens/AdminNotificationsView.tsx',
+  },
+  E_ADMIN_DASHBOARD: {
+    code: 'E_ADMIN_DASHBOARD',
+    slug: 'tableau-de-bord-admin',
+    title: 'Tableau de bord Administrateur',
+    description: 'Vue globale d\'administration de la plateforme Talenta RH.',
+    componentFile: 'frontend/components/screens/AdminUsersView.tsx',
+  },
+  E_FAVORIS: {
+    code: 'E_FAVORIS',
+    slug: 'offres-favorites',
+    title: 'Offres favorites',
+    description: 'Liste des offres d\'emploi enregistrées par le candidat.',
+    componentFile: 'frontend/components/screens/FavorisOffresView.tsx',
+  },
+  E_MESSAGES: {
+    code: 'E_MESSAGES',
+    slug: 'messagerie',
+    title: 'Messagerie',
+    description: 'Discussions en direct entre candidats et recruteurs.',
+    componentFile: 'frontend/components/screens/MessagerieView.tsx',
+  },
+  E_SETTINGS: {
+    code: 'E_SETTINGS',
+    slug: 'parametres',
+    title: 'Paramètres du compte',
+    description: 'Paramètres de profil, sécurité, mot de passe et conformité RGPD.',
+    componentFile: 'frontend/components/screens/ParametresView.tsx',
+  },
+};
+
+function getSlugForScreen(screen: string): string {
+  return PAGE_CONFIG[screen]?.slug || screen.toLowerCase().replace(/_/g, '-');
+}
+
+function getScreenFromHash(hash: string): string {
+  const clean = hash.replace(/^#/, '').trim();
+  if (!clean) return 'E1';
+  for (const [code, info] of Object.entries(PAGE_CONFIG)) {
+    if (info.slug.toLowerCase() === clean.toLowerCase() || code.toLowerCase() === clean.toLowerCase()) {
+      return code === 'E6' ? 'E6_PROFIL' : code;
+    }
+  }
+  return clean === 'E6' ? 'E6_PROFIL' : clean;
+}
+
+function getPageTitleForScreen(screen: string): string {
+  const info = PAGE_CONFIG[screen];
+  return info ? `Talenta RH — ${info.title}` : 'Talenta RH — Recrutement & IA';
+}
+
 export default function AppRoot() {
   const [isMounted, setIsMounted] = useState(false);
 
@@ -430,12 +615,14 @@ export default function AppRoot() {
     });
 
     try {
-      const hash = window.location.hash.replace(/^#/, '');
+      const rawHash = window.location.hash.replace(/^#/, '');
+      const hash = rawHash === 'login' || rawHash === 'register' ? rawHash : getScreenFromHash(rawHash);
       // ISOLATION STRICTE PAR ONGLET : Priorité absolue à sessionStorage
       // pour éviter qu'un onglet ouvert écrase ou redirige un autre onglet
       const savedUserStr = sessionStorage.getItem('talenta_current_user');
       const savedRole = sessionStorage.getItem('talenta_current_role') as RoleName | null;
-      const savedScreen = hash || sessionStorage.getItem('talenta_active_screen');
+      const rawSavedScreen = sessionStorage.getItem('talenta_active_screen');
+      const savedScreen = hash || (rawSavedScreen ? getScreenFromHash(rawSavedScreen) : null);
 
       let restoredUser: User | null = null;
       if (savedUserStr) {
@@ -468,7 +655,7 @@ export default function AppRoot() {
         } else if (hash && isProtectedRoute(hash)) {
           setActiveScreen('E1');
           sessionStorage.setItem('talenta_active_screen', 'E1');
-          window.history.replaceState(null, '', '#E1');
+          window.history.replaceState(null, '', `#${getSlugForScreen('E1')}`);
           setAuthModalTab('login');
           setAuthModalOpen(true);
         } else if (PUBLIC_ROUTES.includes(hash)) {
@@ -477,8 +664,9 @@ export default function AppRoot() {
         } else {
           setActiveScreen('E1');
           sessionStorage.setItem('talenta_active_screen', 'E1');
-          if (window.location.hash && window.location.hash !== '#E1') {
-            window.history.replaceState(null, '', '#E1');
+          const defaultSlug = getSlugForScreen('E1');
+          if (window.location.hash && window.location.hash !== `#${defaultSlug}`) {
+            window.history.replaceState(null, '', `#${defaultSlug}`);
           }
         }
       } else {
@@ -548,8 +736,9 @@ export default function AppRoot() {
 
         setActiveScreen(targetScreen);
         sessionStorage.setItem('talenta_active_screen', targetScreen);
-        if (window.location.hash.replace(/^#/, '') !== targetScreen) {
-          window.history.replaceState(null, '', `#${targetScreen}`);
+        const targetSlug = getSlugForScreen(targetScreen);
+        if (window.location.hash.replace(/^#/, '') !== targetSlug) {
+          window.history.replaceState(null, '', `#${targetSlug}`);
         }
       }
 
@@ -612,13 +801,19 @@ export default function AppRoot() {
     return () => window.removeEventListener('storage', handleStorageSync);
   }, []);
 
-  // Synchronisation activeScreen -> sessionStorage & URL hash
+  // Synchronisation activeScreen -> sessionStorage, Titre de l'onglet & URL hash lisible
   useEffect(() => {
     if (!isMounted) return;
     try {
+      const slug = getSlugForScreen(activeScreen);
       sessionStorage.setItem('talenta_active_screen', activeScreen);
-      if (window.location.hash.replace(/^#/, '') !== activeScreen) {
-        window.history.replaceState(null, '', `#${activeScreen}`);
+
+      // Titre dynamique de l'onglet du navigateur
+      document.title = getPageTitleForScreen(activeScreen);
+
+      // URL dynamique avec le nom lisible de la page (#offres au lieu de #E1)
+      if (window.location.hash.replace(/^#/, '') !== slug) {
+        window.history.replaceState(null, '', `#${slug}`);
       }
     } catch (e) {}
   }, [activeScreen, isMounted]);
@@ -627,21 +822,21 @@ export default function AppRoot() {
   useEffect(() => {
     if (!isMounted) return;
     const handleHashChange = () => {
-      const hash = window.location.hash.replace(/^#/, '');
-      if (hash === 'login') {
+      const rawHash = window.location.hash.replace(/^#/, '');
+      if (rawHash === 'login') {
         setAuthModalTab('login');
         setAuthModalOpen(true);
         return;
       }
-      if (hash === 'register') {
+      if (rawHash === 'register') {
         setAuthModalTab('register');
         setAuthModalOpen(true);
         return;
       }
-      if (hash && hash !== activeScreen) {
-        const target = hash === 'E6' ? 'E6_PROFIL' : hash;
+      const target = getScreenFromHash(rawHash);
+      if (target && target !== activeScreen) {
         if (!currentUser && isProtectedRoute(target)) {
-          window.history.replaceState(null, '', '#E1');
+          window.history.replaceState(null, '', `#${getSlugForScreen('E1')}`);
           setActiveScreen('E1');
           setAuthModalTab('login');
           setAuthModalOpen(true);
@@ -650,22 +845,22 @@ export default function AppRoot() {
 
         // Contrôle d'accès RBAC lors du retour arrière
         if (currentUser && currentRole === 'CANDIDAT' && (RECRUTEUR_EXCLUSIVE.includes(target) || ADMIN_EXCLUSIVE.includes(target))) {
-          window.history.replaceState(null, '', '#E_CANDIDAT_DASHBOARD');
+          window.history.replaceState(null, '', `#${getSlugForScreen('E_CANDIDAT_DASHBOARD')}`);
           setActiveScreen('E_CANDIDAT_DASHBOARD');
           return;
         }
         if (currentUser && currentRole === 'RECRUTEUR' && (CANDIDATE_EXCLUSIVE.includes(target) || ADMIN_EXCLUSIVE.includes(target) || target === 'E11')) {
-          window.history.replaceState(null, '', '#E7');
+          window.history.replaceState(null, '', `#${getSlugForScreen('E7')}`);
           setActiveScreen('E7');
           return;
         }
         if (currentUser && currentRole === 'ADMIN' && (CANDIDATE_EXCLUSIVE.includes(target) || RECRUTEUR_EXCLUSIVE.includes(target))) {
-          window.history.replaceState(null, '', '#E_ADMIN_DASHBOARD');
+          window.history.replaceState(null, '', `#${getSlugForScreen('E_ADMIN_DASHBOARD')}`);
           setActiveScreen('E_ADMIN_DASHBOARD');
           return;
         }
 
-        setActiveScreen(target);
+        handleNavigate(target);
       }
     };
     window.addEventListener('hashchange', handleHashChange);
