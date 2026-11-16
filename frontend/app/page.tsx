@@ -1095,22 +1095,45 @@ export default function AppRoot() {
       lu: false,
     };
 
-    const updatedMessages = [...messages, newMsg];
-    setMessages(updatedMessages);
-
     const updatedConversations = conversations.map((c) => {
       if (c.id === conversationId) {
         return {
           ...c,
           dernier_message: contenu,
           updated_at: nowStr,
-          non_lus_candidat: isCandidat ? 0 : c.non_lus_candidat + 1,
-          non_lus_recruteur: isCandidat ? c.non_lus_recruteur + 1 : 0,
+          non_lus_candidat: isCandidat ? 0 : (c.non_lus_candidat || 0) + 1,
+          non_lus_recruteur: isCandidat ? (c.non_lus_recruteur || 0) + 1 : 0,
         };
       }
       return c;
     });
-    setConversations(updatedConversations);
+
+    setMessages((prev) => {
+      const next = [...prev, newMsg];
+      try {
+        localStorage.setItem('talenta_messages_v2', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    setConversations((prev) => {
+      const next = prev.map((c) => {
+        if (c.id === conversationId) {
+          return {
+            ...c,
+            dernier_message: contenu,
+            updated_at: nowStr,
+            non_lus_candidat: isCandidat ? 0 : (c.non_lus_candidat || 0) + 1,
+            non_lus_recruteur: isCandidat ? (c.non_lus_recruteur || 0) + 1 : 0,
+          };
+        }
+        return c;
+      });
+      try {
+        localStorage.setItem('talenta_conversations_v2', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   // Sélectionner une discussion et marquer les messages comme lus pour l'acteur connecté
@@ -1162,6 +1185,10 @@ export default function AppRoot() {
     );
 
     if (!existing) {
+      const cleanOfferTitle = (offre.titre || '').trim();
+      const isPlaceholderTitle = !cleanOfferTitle || cleanOfferTitle.length < 3 || /^[a-z0-9_-]+$/i.test(cleanOfferTitle) && !cleanOfferTitle.includes(' ');
+      const displayOfferTitle = isPlaceholderTitle ? `Offre chez ${entrepriseName}` : cleanOfferTitle;
+
       existing = {
         id: `conv-${Date.now()}`,
         candidat_id: candId,
@@ -1172,14 +1199,35 @@ export default function AppRoot() {
         entreprise_id: offre.entreprise_id || 'c-alpha',
         entreprise_nom: entrepriseName,
         offre_id: offre.id,
-        offre_titre: offre.titre,
-        dernier_message: '',
+        offre_titre: displayOfferTitle,
+        dernier_message: 'Discussion initiée avec le recruteur',
         updated_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
         non_lus_candidat: 0,
         non_lus_recruteur: 0,
       };
+
+      // Message d'accueil professionnel immédiat de la part de l'entreprise
+      const welcomeMsg: ChatMessage = {
+        id: `msg-${Date.now()}-welcome`,
+        conversation_id: existing.id,
+        sender_id: recruteurId,
+        sender_role: 'RECRUTEUR',
+        sender_name: entrepriseName,
+        receiver_id: candId,
+        receiver_name: candName,
+        contenu: `Bonjour ${currentUser.prenom || 'candidat'},\n\nBienvenue dans l'espace d'échange de ${entrepriseName} concernant le poste « ${displayOfferTitle} ».\n\nNotre équipe RH étudie attentivement les profils et reste à votre disposition. N'hésitez pas à poser vos questions concernant les missions, les compétences recherchées ou le processus de recrutement.`,
+        created_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        lu: true,
+      };
+
       const newConvs = [existing, ...conversations];
       setConversations(newConvs);
+      setMessages((prev) => [...prev, welcomeMsg]);
+
+      try {
+        localStorage.setItem('talenta_conversations_v2', JSON.stringify(newConvs));
+        localStorage.setItem('talenta_messages_v2', JSON.stringify([...messages, welcomeMsg]));
+      } catch {}
     }
 
     setSelectedConversationId(existing.id);
