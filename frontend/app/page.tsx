@@ -1982,6 +1982,46 @@ export default function AppRoot() {
     ).length;
   }, [candidateApplications]);
 
+  // Nombre d'offres réelles du recruteur connecté (correspondant exactement aux offres visibles dans l'écran "Mes offres")
+  const recruiterMyOffresCount = useMemo(() => {
+    const curEntId = currentUser?.entreprise_id || currentUser?.entreprise?.id;
+    const curUserId = currentUser?.id;
+    const activeOffres = offres.filter((o) => !o.supprimee && o.statut !== 'ARCHIVEE');
+
+    return activeOffres.filter((o) => {
+      if (curUserId && o.auteur_id && o.auteur_id === curUserId) return true;
+      if (curEntId && (o.entreprise_id === curEntId || o.entreprise?.id === curEntId)) return true;
+      return false;
+    }).length;
+  }, [offres, currentUser]);
+
+  // Nombre d'entretiens pour le recruteur connecté (correspondant à l'écran "Mes entretiens")
+  const recruiterEntretiensCount = useMemo(() => {
+    const curUserId = currentUser?.id;
+    return candidatures.filter((c) => {
+      const hasInterview =
+        c.statut === 'ENTRETIEN' ||
+        Boolean(c.date_entretien) ||
+        Boolean(c.statut_entretien);
+      if (!hasInterview) return false;
+
+      if (curUserId) {
+        if (c.recruteur_entretien_id && c.recruteur_entretien_id === curUserId) return true;
+        if (c.traitee_par_id && c.traitee_par_id === curUserId) return true;
+        if (!c.recruteur_entretien_id && !c.traitee_par_id && c.offre?.auteur_id === curUserId) return true;
+        if (!c.recruteur_entretien_id && !c.traitee_par_id && !c.offre?.auteur_id) return true;
+        return false;
+      }
+
+      return true;
+    }).length;
+  }, [candidatures, currentUser]);
+
+  // Nombre d'offres publiques disponibles pour le candidat ou visiteur
+  const publicPublishedOffresCount = useMemo(() => {
+    return offres.filter((o) => o.statut === 'PUBLIEE' && !o.supprimee).length;
+  }, [offres]);
+
   if (!isMounted) {
     return (
       <div className="min-h-screen bg-[#f7f8fc] flex items-center justify-center">
@@ -2028,8 +2068,8 @@ export default function AppRoot() {
           onNavigate={handleNavigate}
           favorisCount={uniqueFavorisCount}
           unreadMessagesCount={totalUnreadMessages}
-          offresCount={offres.filter((o) => o.statut === 'PUBLIEE').length}
-          entretiensCount={candidateEntretiensCount}
+          offresCount={currentRole === 'RECRUTEUR' ? recruiterMyOffresCount : publicPublishedOffresCount}
+          entretiensCount={currentRole === 'RECRUTEUR' ? recruiterEntretiensCount : candidateEntretiensCount}
         />
         {/* Main Screen Router according to Section 5 Aperçu des interfaces */}
         <main className="min-w-0 flex-1 pb-16 lg:ml-64">
