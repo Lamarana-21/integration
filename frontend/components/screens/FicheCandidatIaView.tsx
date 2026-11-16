@@ -180,13 +180,14 @@ export function FicheCandidatIaView({
             req.toLowerCase().includes(cs.toLowerCase())
         )
       );
-  const missingSkills = isNonConformeDoc
-    ? requiredSkills
-    : requiredSkills.filter((req) => !matchedSkills.includes(req));
+  const missingSkills = isNonConformeDoc ? requiredSkills : requiredSkills.filter((req) => !matchedSkills.includes(req));
 
-  const score = isNonConformeDoc
+  // RÈGLE STRICTE : Si 0 compétence correspondante, le score DOIT être 0%
+  const score = isNonConformeDoc || matchedSkills.length === 0
     ? 0
-    : (analyse?.score_correspondance ?? 78);
+    : (analyse?.score_correspondance && analyse.score_correspondance > 0
+        ? analyse.score_correspondance
+        : Math.round((matchedSkills.length / requiredSkills.length) * 100));
 
   const prenom = candidat?.prenom || user?.prenom || 'Candidat';
   const nom = candidat?.nom || user?.nom || '';

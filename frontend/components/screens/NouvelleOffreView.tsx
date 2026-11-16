@@ -145,26 +145,20 @@ export function NouvelleOffreView({
     setMode('LIST');
   };
 
-  // Offres publiées par ce recruteur / son entreprise (hors offres supprimées)
+  // Offres publiées par ce recruteur / son entreprise exclusivement (hors offres supprimées)
   const myOffres = useMemo(() => {
     const curEntId = currentUser?.entreprise_id || currentUser?.entreprise?.id;
+    const curUserId = currentUser?.id;
     const activeOffres = offres.filter((o) => !o.supprimee && o.statut !== 'ARCHIVEE');
 
+    // Cloisonnement strict : uniquement les offres rattachées à son entreprise ou dont il est l'auteur
     const scoped = activeOffres.filter((o) => {
-      if (currentUser?.id && o.auteur_id === currentUser.id) return true;
+      if (curUserId && o.auteur_id && o.auteur_id === curUserId) return true;
       if (curEntId && (o.entreprise_id === curEntId || o.entreprise?.id === curEntId)) return true;
-      if (
-        !curEntId &&
-        (o.entreprise_id === 'c-alpha' ||
-          o.entreprise_id === '01a16a74-f27b-738f-a948-0fb179d8aed4')
-      )
-        return true;
       return false;
     });
 
-    const baseList = scoped.length > 0 ? scoped : activeOffres;
-
-    return baseList.filter((o) => {
+    return scoped.filter((o) => {
       if (statusFilter !== 'ALL' && o.statut !== statusFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -288,11 +282,10 @@ export function NouvelleOffreView({
                 key={tab.id}
                 type="button"
                 onClick={() => setStatusFilter(tab.id)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                  statusFilter === tab.id
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${statusFilter === tab.id
                     ? 'bg-[#594be0] text-white'
                     : 'bg-[#f8fafc] text-[#475569] hover:bg-[#f1f5f9]'
-                }`}
+                  }`}
               >
                 {tab.label}
               </button>
@@ -338,13 +331,12 @@ export function NouvelleOffreView({
                           {job.type_contrat}
                         </span>
                         <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
-                            job.statut === 'PUBLIEE'
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${job.statut === 'PUBLIEE'
                               ? 'bg-[#ecfdf5] text-[#059669]'
                               : job.statut === 'CLOTUREE'
-                              ? 'bg-[#fef2f2] text-[#dc2626]'
-                              : 'bg-[#fffbeb] text-[#d97706]'
-                          }`}
+                                ? 'bg-[#fef2f2] text-[#dc2626]'
+                                : 'bg-[#fffbeb] text-[#d97706]'
+                            }`}
                         >
                           {job.statut === 'PUBLIEE' ? (
                             <>
@@ -387,6 +379,9 @@ export function NouvelleOffreView({
                             • Date limite : {formatFrenchDate(job.date_limite)}
                           </span>
                         )}
+                        <span className="inline-flex items-center gap-1 rounded-md bg-[#f1f5f9] px-2 py-0.5 text-[11px] font-bold text-[#334155]">
+                          Ajoutée par : {job.auteur ? `${job.auteur.prenom} ${job.auteur.nom}` : (job.auteur_id === currentUser?.id ? 'Vous' : 'Équipe RH')}
+                        </span>
                       </div>
 
                       {job.competences_requises && job.competences_requises.length > 0 && (
@@ -408,11 +403,10 @@ export function NouvelleOffreView({
                       <button
                         type="button"
                         onClick={() => setExpandedOfferId((prev) => (prev === job.id ? null : job.id))}
-                        className={`inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
-                          expandedOfferId === job.id
+                        className={`inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold transition cursor-pointer ${expandedOfferId === job.id
                             ? 'border-[#594be0] bg-[#594be0] text-white shadow-xs'
                             : 'border-[#cbd5e1] bg-[#f8fafc] text-[#334155] hover:bg-[#eef2ff] hover:text-[#594be0]'
-                        }`}
+                          }`}
                       >
                         <Users size={13} />
                         <span>Candidatures ({appCount})</span>
@@ -513,6 +507,22 @@ export function NouvelleOffreView({
                                         <span>{candUser?.email || 'candidat@talenta.tn'}</span>
                                         <span>•</span>
                                         <span>Postulé le {formatFrenchDate(c.created_at)}</span>
+                                        {c.statut !== 'RECUE' && (
+                                          <>
+                                            <span>•</span>
+                                            <span className="font-bold text-[#594be0]">
+                                              Traité par : {c.traitee_par_nom || (job.auteur ? `${job.auteur.prenom} ${job.auteur.nom}` : 'Équipe RH')}
+                                            </span>
+                                          </>
+                                        )}
+                                        {c.date_entretien && (
+                                          <>
+                                            <span>•</span>
+                                            <span className="font-bold text-[#2563eb]">
+                                              📅 Entretien : {c.date_entretien} {c.recruteur_entretien_nom && `(${c.recruteur_entretien_nom})`}
+                                            </span>
+                                          </>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
@@ -520,34 +530,32 @@ export function NouvelleOffreView({
                                   <div className="flex flex-wrap items-center gap-2">
                                     {/* Statut */}
                                     <span
-                                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
-                                        c.statut === 'RECUE'
+                                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${c.statut === 'RECUE'
                                           ? 'bg-[#f1f5f9] text-[#475569]'
                                           : c.statut === 'EN_EXAMEN'
-                                          ? 'bg-[#eff6ff] text-[#2563eb]'
-                                          : c.statut === 'PRESELECTIONNEE'
-                                          ? 'bg-[#ecfdf5] text-[#059669]'
-                                          : c.statut === 'ENTRETIEN'
-                                          ? 'bg-[#fffbeb] text-[#d97706]'
-                                          : c.statut === 'ACCEPTEE'
-                                          ? 'bg-[#ecfdf5] text-[#059669]'
-                                          : 'bg-[#fef2f2] text-[#dc2626]'
-                                      }`}
+                                            ? 'bg-[#eff6ff] text-[#2563eb]'
+                                            : c.statut === 'PRESELECTIONNEE'
+                                              ? 'bg-[#ecfdf5] text-[#059669]'
+                                              : c.statut === 'ENTRETIEN'
+                                                ? 'bg-[#fffbeb] text-[#d97706]'
+                                                : c.statut === 'ACCEPTEE'
+                                                  ? 'bg-[#ecfdf5] text-[#059669]'
+                                                  : 'bg-[#fef2f2] text-[#dc2626]'
+                                        }`}
                                     >
                                       {c.statut}
                                     </span>
 
                                     {/* Score IA */}
                                     <span
-                                      className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold ${
-                                        score === 0
+                                      className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold ${score === 0
                                           ? 'border border-[#fecaca] bg-[#fef2f2] text-[#dc2626]'
                                           : score >= 80
-                                          ? 'border border-[#bbf7d0] bg-[#ecfdf5] text-[#059669]'
-                                          : score >= 65
-                                          ? 'border border-[#bfdbfe] bg-[#eff6ff] text-[#2563eb]'
-                                          : 'border border-[#fde68a] bg-[#fffbeb] text-[#d97706]'
-                                      }`}
+                                            ? 'border border-[#bbf7d0] bg-[#ecfdf5] text-[#059669]'
+                                            : score >= 65
+                                              ? 'border border-[#bfdbfe] bg-[#eff6ff] text-[#2563eb]'
+                                              : 'border border-[#fde68a] bg-[#fffbeb] text-[#d97706]'
+                                        }`}
                                     >
                                       <Sparkles size={11} />
                                       <span>{score === 0 ? 'Invalide (0%)' : `IA : ${score}%`}</span>

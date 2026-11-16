@@ -1251,14 +1251,6 @@ export function MesCvsView({
           <div className="flex flex-wrap items-center gap-2.5">
             <button
               type="button"
-              onClick={handleCreateNewDynamicCv}
-              className="flex items-center gap-1.5 rounded-2xl border border-[#d8d4fa] bg-white px-4 py-2.5 text-xs font-bold text-[#5547d7] hover:bg-[#f4f2ff] transition shadow-2xs"
-            >
-              <FilePlus2 size={15} />
-              <span>Nouvelle variante de CV</span>
-            </button>
-            <button
-              type="button"
               onClick={() => setShowFullscreenPreview(true)}
               className="flex items-center gap-1.5 rounded-2xl border border-[#dde1ee] bg-white px-4 py-2.5 text-xs font-bold text-[#424b61] hover:bg-[#f6f7fb] transition shadow-2xs"
             >

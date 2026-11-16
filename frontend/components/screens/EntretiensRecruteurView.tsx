@@ -14,11 +14,12 @@ import {
   Video,
   XCircle,
 } from 'lucide-react';
-import { Candidature, formatFrenchDate } from '@/lib/types';
+import { Candidature, User, formatFrenchDate } from '@/lib/types';
 import { resolveDepositedCv, downloadCandidateCvFile } from './CandidaturesOffreView';
 
 interface EntretiensRecruteurViewProps {
   candidatures: Candidature[];
+  currentUser?: User | null;
   onOpenDetail: (candidature: Candidature) => void;
   onUpdateInterviewStatus: (
     candId: string,
@@ -28,21 +29,37 @@ interface EntretiensRecruteurViewProps {
 
 export function EntretiensRecruteurView({
   candidatures,
+  currentUser,
   onOpenDetail,
   onUpdateInterviewStatus,
 }: EntretiensRecruteurViewProps) {
   const [filterStatut, setFilterStatut] = useState<'TOUS' | 'PROGRAMME' | 'PASSE' | 'NON_PASSE'>('TOUS');
   const [search, setSearch] = useState('');
 
-  // Filtrer les candidatures ayant un entretien programmé ou statut ENTRETIEN
+  // Filtrer UNIQUEMENT les entretiens programmés par ce recruteur connecté (ou dont l'offre lui est rattachée)
   const interviewCands = useMemo(() => {
-    return candidatures.filter(
-      (c) =>
+    const curUserId = currentUser?.id;
+    return candidatures.filter((c) => {
+      const hasInterview =
         c.statut === 'ENTRETIEN' ||
         Boolean(c.date_entretien) ||
-        Boolean(c.statut_entretien)
-    );
-  }, [candidatures]);
+        Boolean(c.statut_entretien);
+      if (!hasInterview) return false;
+
+      // Il ne doit voir que les entretiens qu'IL a programmés
+      if (curUserId) {
+        if (c.recruteur_entretien_id && c.recruteur_entretien_id === curUserId) return true;
+        if (c.traitee_par_id && c.traitee_par_id === curUserId) return true;
+        // Si non encore assigné spécifiquement à un autre recruteur mais auteur de l'offre
+        if (!c.recruteur_entretien_id && !c.traitee_par_id && c.offre?.auteur_id === curUserId) return true;
+        // S'il n'y a aucun recruteur assigné dans la graine, on l'affiche pour permettre la gestion
+        if (!c.recruteur_entretien_id && !c.traitee_par_id && !c.offre?.auteur_id) return true;
+        return false;
+      }
+
+      return true;
+    });
+  }, [candidatures, currentUser]);
 
   const filtered = useMemo(() => {
     return interviewCands.filter((c) => {
@@ -201,19 +218,23 @@ export function EntretiensRecruteurView({
 
                       {/* Date & Modalité */}
                       <td className="px-4 py-4">
-                        <div className="inline-flex items-center gap-1.5 font-bold text-[#0f172a]">
+                        <div className="inline-flex items-center gap-1.5 font-extrabold text-[#0f172a] text-xs">
                           <Calendar size={13} className="text-[#594be0]" />
                           <span>{cand.date_entretien || 'À définir'}</span>
                         </div>
-                        <div className="text-[11px] text-[#64748b] mt-0.5">
+                        <div className="text-[11px] font-semibold mt-1">
                           {cand.type_entretien === 'VISIO' ? (
-                            <span className="inline-flex items-center gap-1 text-[#2563eb]">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-[#eff6ff] text-[#2563eb] px-2 py-0.5 border border-[#bfdbfe]">
                               <Video size={11} /> Visio-conférence
                             </span>
                           ) : cand.type_entretien === 'TELEPHONE' ? (
-                            'Téléphonique'
+                            <span className="inline-flex items-center gap-1 rounded-md bg-[#f8fafc] text-[#475569] px-2 py-0.5 border border-[#e2e8f0]">
+                              Téléphonique
+                            </span>
                           ) : (
-                            'Présentiel sur site'
+                            <span className="inline-flex items-center gap-1 rounded-md bg-[#f8fafc] text-[#475569] px-2 py-0.5 border border-[#e2e8f0]">
+                              Présentiel sur site
+                            </span>
                           )}
                         </div>
                       </td>
@@ -221,54 +242,66 @@ export function EntretiensRecruteurView({
                       {/* État actuel de l'entretien */}
                       <td className="px-4 py-4">
                         {currentInterviewState === 'PASSE' ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#ecfdf5] border border-[#bbf7d0] px-2.5 py-1 text-[11px] font-bold text-[#166534]">
-                            <CheckCircle2 size={12} /> Entretien passé
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#ecfdf5] border border-[#a7f3d0] px-3 py-1 text-xs font-black text-[#047857] shadow-2xs">
+                            <CheckCircle2 size={13} className="text-[#10b981]" /> Passé
                           </span>
                         ) : currentInterviewState === 'NON_PASSE' ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#fef2f2] border border-[#fecaca] px-2.5 py-1 text-[11px] font-bold text-[#991b1b]">
-                            <XCircle size={12} /> Non passé
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fef2f2] border border-[#fecaca] px-3 py-1 text-xs font-black text-[#b91c1c] shadow-2xs">
+                            <XCircle size={13} className="text-[#ef4444]" /> Non passé
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#fffbeb] border border-[#fed7aa] px-2.5 py-1 text-[11px] font-bold text-[#c2410c]">
-                            <Clock size={12} /> Programmé
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fffbeb] border border-[#fed7aa] px-3 py-1 text-xs font-black text-[#c2410c] shadow-2xs">
+                            <Clock size={13} className="text-[#f59e0b]" /> Programmé
                           </span>
                         )}
                       </td>
 
                       {/* Actions 1-clic : Passé / Non passé / Re-programmer */}
                       <td className="px-4 py-4">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#f8fafc] border border-[#e2e8f0] w-fit shadow-2xs">
                           <button
                             type="button"
                             onClick={() => onUpdateInterviewStatus(cand.id, 'PASSE')}
-                            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition cursor-pointer ${
+                            className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-black transition-all cursor-pointer ${
                               currentInterviewState === 'PASSE'
-                                ? 'bg-[#166534] text-white shadow-xs'
-                                : 'border border-[#bbf7d0] bg-[#f0fdf4] text-[#166534] hover:bg-[#dcfce7]'
+                                ? 'bg-[#10b981] text-white shadow-sm'
+                                : 'text-[#065f46] hover:bg-[#ecfdf5]'
                             }`}
+                            title="Indiquer que l'entretien a eu lieu"
                           >
-                            ✓ Passé
+                            <CheckCircle2 size={13} className={currentInterviewState === 'PASSE' ? 'text-white' : 'text-[#10b981]'} />
+                            <span>Passé</span>
                           </button>
+
+                          <div className="h-4 w-px bg-[#cbd5e1]" />
+
                           <button
                             type="button"
                             onClick={() => onUpdateInterviewStatus(cand.id, 'NON_PASSE')}
-                            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition cursor-pointer ${
+                            className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-black transition-all cursor-pointer ${
                               currentInterviewState === 'NON_PASSE'
-                                ? 'bg-[#991b1b] text-white shadow-xs'
-                                : 'border border-[#fecaca] bg-[#fef2f2] text-[#991b1b] hover:bg-[#fee2e2]'
+                                ? 'bg-[#ef4444] text-white shadow-sm'
+                                : 'text-[#991b1b] hover:bg-[#fef2f2]'
                             }`}
+                            title="Indiquer que le candidat ne s'est pas présenté"
                           >
-                            ✕ Non passé
+                            <XCircle size={13} className={currentInterviewState === 'NON_PASSE' ? 'text-white' : 'text-[#ef4444]'} />
+                            <span>Non passé</span>
                           </button>
+
                           {currentInterviewState !== 'PROGRAMME' && (
-                            <button
-                              type="button"
-                              onClick={() => onUpdateInterviewStatus(cand.id, 'PROGRAMME')}
-                              className="rounded-lg border border-[#cbd5e1] bg-white px-2 py-1 text-[11px] font-semibold text-[#475569] hover:bg-[#f8fafc] cursor-pointer"
-                              title="Réinitialiser à Programmé"
-                            >
-                              Réinitialiser
-                            </button>
+                            <>
+                              <div className="h-4 w-px bg-[#cbd5e1]" />
+                              <button
+                                type="button"
+                                onClick={() => onUpdateInterviewStatus(cand.id, 'PROGRAMME')}
+                                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-[#64748b] hover:text-[#0f172a] hover:bg-[#e2e8f0] transition cursor-pointer"
+                                title="Réinitialiser l'entretien à Programmé"
+                              >
+                                <Clock size={11} />
+                                <span>Programmé</span>
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -278,7 +311,7 @@ export function EntretiensRecruteurView({
                         <button
                           type="button"
                           onClick={() => onOpenDetail(cand)}
-                          className="inline-flex items-center gap-1 rounded-lg bg-[#594be0] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#483ad3] transition cursor-pointer"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#594be0] to-[#483ad3] px-4 py-2 text-xs font-black text-white hover:opacity-95 shadow-xs transition-all cursor-pointer"
                         >
                           <span>Évaluer & Décider</span>
                         </button>

@@ -75,6 +75,10 @@ interface StoredDecision {
   type_entretien?: 'VISIO' | 'PRESENTIEL' | 'TELEPHONE';
   lien_ou_lieu_entretien?: string;
   updated_at?: string;
+  traitee_par_id?: string;
+  traitee_par_nom?: string;
+  recruteur_entretien_id?: string;
+  recruteur_entretien_nom?: string;
 }
 
 function computeSequentialSteps(
@@ -1424,7 +1428,17 @@ export default function AppRoot() {
     const resolvedTypeEntretien = entretienDetails?.type || existingCand?.type_entretien;
     const resolvedLienEntretien = entretienDetails?.lien || existingCand?.lien_ou_lieu_entretien;
 
-    const decisionPayload: StoredDecision = {
+    const currentRecruiterName = currentUser
+      ? `${currentUser.prenom} ${currentUser.nom}`.trim()
+      : 'Recruteur';
+    const isNowBeingHandled = newStatus !== 'RECUE';
+
+    const decisionPayload: StoredDecision & {
+      traitee_par_id?: string;
+      traitee_par_nom?: string;
+      recruteur_entretien_id?: string;
+      recruteur_entretien_nom?: string;
+    } = {
       statut: newStatus,
       etapes_validees,
       etape_avant_decision,
@@ -1433,6 +1447,14 @@ export default function AppRoot() {
       type_entretien: resolvedTypeEntretien,
       lien_ou_lieu_entretien: resolvedLienEntretien,
       updated_at: updatedAt,
+      traitee_par_id: isNowBeingHandled ? (existingCand?.traitee_par_id || currentUser?.id) : undefined,
+      traitee_par_nom: isNowBeingHandled ? (existingCand?.traitee_par_nom || currentRecruiterName) : undefined,
+      recruteur_entretien_id: (newStatus === 'ENTRETIEN' || resolvedDateEntretien)
+        ? (existingCand?.recruteur_entretien_id || currentUser?.id)
+        : existingCand?.recruteur_entretien_id,
+      recruteur_entretien_nom: (newStatus === 'ENTRETIEN' || resolvedDateEntretien)
+        ? (existingCand?.recruteur_entretien_nom || currentRecruiterName)
+        : existingCand?.recruteur_entretien_nom,
     };
 
     const candUserIdForKey =
@@ -1682,8 +1704,11 @@ export default function AppRoot() {
             )
           );
           const missing = reqSkills.filter((r) => !matching.includes(r));
-          const matchPercent = reqSkills.length > 0 ? matching.length / reqSkills.length : 0.85;
-          const calculatedScore = Math.min(98, Math.max(58, Math.round(matchPercent * 80 + 18)));
+
+          // RÈGLE STRICTE : Si 0 compétence validée, score = 0%
+          const calculatedScore = matching.length === 0
+            ? 0
+            : Math.min(98, Math.max(25, Math.round((matching.length / reqSkills.length) * 85 + 10)));
 
           const updatedAnalyse: import('@/lib/types').AnalyseCv = {
             id: c.analyse?.id || `ana-${Date.now()}`,
@@ -1769,9 +1794,29 @@ export default function AppRoot() {
 
       setOffres((prev) => [newJob, ...prev]);
 
-      // Notification automatique pour l'administrateur système détaillant le recruteur, le type d'offre et l'entreprise affiliée
+      // Notification pour les recruteurs de la même entreprise (et l'admin) si un collègue ajoute une offre
       const recruiterName = currentUser ? `${currentUser.prenom} ${currentUser.nom}`.trim() : 'Responsable RH';
       const recruiterEmail = currentUser?.email || 'recruteur@entreprise.com';
+
+      const companyRecruiters = users.filter(
+        (u) =>
+          u.role?.nom === 'RECRUTEUR' &&
+          (u.entreprise_id === targetCompanyId || u.entreprise?.id === targetCompanyId) &&
+          u.id !== currentUser?.id
+      );
+
+      const recruiterNotifications: NotificationRecord[] = companyRecruiters.map((rec, idx) => ({
+        id: `notif-${Date.now()}-collegue-${idx}`,
+        utilisateur_id: rec.id,
+        user: rec,
+        type: 'NOUVELLE_OFFRE',
+        objet: `Nouvelle offre publiée au sein de votre entreprise : ${payload.titre}`,
+        message: `Votre collègue ${recruiterName} vient d'ajouter une nouvelle offre « ${payload.titre} » (${payload.type_contrat} - ${payload.lieu}) pour votre entreprise ${company?.nom || ''}.`,
+        statut_envoi: 'ENVOYE',
+        created_at: 'À l’instant',
+      }));
+
+      // Notification automatique pour l'administrateur système détaillant le recruteur, le type d'offre et l'entreprise affiliée
       const adminNotif: NotificationRecord = {
         id: `notif-${Date.now()}-admin-offre`,
         utilisateur_id: INITIAL_USERS[0].id,
@@ -1782,7 +1827,7 @@ export default function AppRoot() {
         statut_envoi: 'ENVOYE',
         created_at: 'À l’instant',
       };
-      setNotifications((prev) => [adminNotif, ...prev]);
+      setNotifications((prev) => [adminNotif, ...recruiterNotifications, ...prev]);
 
       // Synchronisation avec les notifications fraîches de MySQL
       api.getNotifications().then((freshNotifs) => {
@@ -1860,7 +1905,21 @@ export default function AppRoot() {
     );
   };
 
-  // Candidatures associées au candidat connecté (résolution multi-critères robuste et tolérante aux alias)
+  // Calcul du nombre d'offres favorites uniques pour la sidebar et l'en-tête (évite les doublons d'alias)
+  const uniqueFavorisCount = useMemo(() => {
+    if (!favorisOffresIds || favorisOffresIds.length === 0) return 0;
+    const seen = new Set<string>();
+    for (const rawId of favorisOffresIds) {
+      const clean = String(rawId).trim().toLowerCase();
+      // Trouver la clé canonique si alias
+      const aliases = [clean, ...(JOB_ALIAS_MAP[clean] || []).map((a) => a.toLowerCase())];
+      const alreadyCounted = aliases.some((a) => seen.has(a));
+      if (!alreadyCounted) {
+        seen.add(clean);
+      }
+    }
+    return seen.size;
+  }, [favorisOffresIds]);
   const candidateApplications = useMemo(() => {
     if (!currentUser) return [];
 
@@ -1967,7 +2026,7 @@ export default function AppRoot() {
           currentRole={currentRole}
           activeScreen={activeScreen}
           onNavigate={handleNavigate}
-          favorisCount={favorisOffresIds.length}
+          favorisCount={uniqueFavorisCount}
           unreadMessagesCount={totalUnreadMessages}
           offresCount={offres.filter((o) => o.statut === 'PUBLIEE').length}
           entretiensCount={candidateEntretiensCount}
@@ -2149,6 +2208,7 @@ export default function AppRoot() {
           {activeScreen === 'E_RECRUTEUR_ENTRETIENS' && currentUser && (
             <EntretiensRecruteurView
               candidatures={candidatures}
+              currentUser={currentUser}
               onOpenDetail={(cand) => {
                 setSelectedCandidatureForDetail(cand);
                 handleNavigate('E10');
@@ -2162,6 +2222,7 @@ export default function AppRoot() {
             <CandidaturesOffreView
               offres={offres}
               candidatures={candidatures}
+              currentUser={currentUser}
               onOpenDetail={(cand) => {
                 setSelectedCandidatureForDetail(cand);
                 handleNavigate('E10');

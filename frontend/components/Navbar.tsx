@@ -75,12 +75,20 @@ export function Navbar({
     if (!currentUser || !notifications) return [];
     if (currentRole === 'ADMIN') return notifications;
     if (currentRole === 'RECRUTEUR') {
-      return notifications.filter(
-        (n) =>
-          n.type === 'NOUVELLE_CANDIDATURE' ||
-          n.type === 'NOUVELLE_OFFRE' ||
-          n.utilisateur_id === currentUser.id
-      );
+      const curEntId = currentUser.entreprise_id || currentUser.entreprise?.id;
+      return notifications.filter((n) => {
+        // Notification explicitement adressée à ce recruteur
+        if (n.utilisateur_id === currentUser.id) return true;
+        // Si nouvelle offre ou nouvelle candidature dans son entreprise
+        if (n.type === 'NOUVELLE_CANDIDATURE' || n.type === 'NOUVELLE_OFFRE') {
+          // Si la notification cible un autre utilisateur avec un ID différent et non lié à l'entreprise
+          if (n.utilisateur_id && n.utilisateur_id !== currentUser.id && !n.message?.includes(currentUser.entreprise?.nom || '')) {
+            return false;
+          }
+          return true;
+        }
+        return false;
+      });
     }
     // Candidat
     return notifications.filter(

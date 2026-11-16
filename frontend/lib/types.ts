@@ -223,6 +223,10 @@ export interface Candidature {
   type_entretien?: 'VISIO' | 'PRESENTIEL' | 'TELEPHONE';
   lien_ou_lieu_entretien?: string;
   statut_entretien?: 'PROGRAMME' | 'PASSE' | 'NON_PASSE';
+  traitee_par_id?: string;
+  traitee_par_nom?: string;
+  recruteur_entretien_id?: string;
+  recruteur_entretien_nom?: string;
   analyse?: AnalyseCv;
   notes_internes?: NoteInterne[];
   created_at: string;

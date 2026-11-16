@@ -241,10 +241,9 @@ class CandidatController extends Controller
             if ($isFav) {
                 $favoris = array_values(array_filter($favoris, fn($id) => $id !== $offreId && $id !== $alias));
             } else {
+                // Ne stocker qu'un seul identifiant canonique par offre pour éviter les doublons dans le compteur
+                $favoris = array_values(array_filter($favoris, fn($id) => $id !== $offreId && $id !== $alias));
                 $favoris[] = $offreId;
-                if ($alias) {
-                    $favoris[] = $alias;
-                }
             }
         }
 

@@ -22,11 +22,12 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { ApplicationStatus, CV, Candidature, Offre, formatFrenchDate } from '@/lib/types';
+import { ApplicationStatus, CV, Candidature, Offre, User, formatFrenchDate } from '@/lib/types';
 
 interface CandidaturesOffreViewProps {
   offres: Offre[];
   candidatures: Candidature[];
+  currentUser?: User | null;
   onOpenDetail: (candidature: Candidature) => void;
   onBulkUpdateStatus: (ids: string[], newStatus: ApplicationStatus) => void;
 }
@@ -568,6 +569,7 @@ export function DepositedCvRenderer({
 export function CandidaturesOffreView({
   offres,
   candidatures,
+  currentUser,
   onOpenDetail,
   onBulkUpdateStatus,
 }: CandidaturesOffreViewProps) {
@@ -578,10 +580,29 @@ export function CandidaturesOffreView({
   const [quickViewCand, setQuickViewCand] = useState<Candidature | null>(null);
   const [aiModalCand, setAiModalCand] = useState<Candidature | null>(null);
 
+  // Cloisonnement strict des offres pour le recruteur connecté
+  const recruiterOffres = useMemo(() => {
+    const curEntId = currentUser?.entreprise_id || currentUser?.entreprise?.id;
+    const curUserId = currentUser?.id;
+    return offres.filter((o) => {
+      if (curUserId && o.auteur_id && o.auteur_id === curUserId) return true;
+      if (curEntId && (o.entreprise_id === curEntId || o.entreprise?.id === curEntId)) return true;
+      return false;
+    });
+  }, [offres, currentUser]);
+
+  const recruiterOffreIds = useMemo(() => new Set(recruiterOffres.map((o) => o.id)), [recruiterOffres]);
+
+  // Candidatures associées exclusivement aux offres de son entreprise
+  const recruiterCandidatures = useMemo(() => {
+    if (recruiterOffres.length === 0) return [];
+    return candidatures.filter((c) => recruiterOffreIds.has(c.offre_id));
+  }, [candidatures, recruiterOffres, recruiterOffreIds]);
+
   const scopedByOffre = useMemo(() => {
-    if (selectedOffreId === 'ALL') return candidatures;
-    return candidatures.filter((c) => c.offre_id === selectedOffreId);
-  }, [candidatures, selectedOffreId]);
+    if (selectedOffreId === 'ALL') return recruiterCandidatures;
+    return recruiterCandidatures.filter((c) => c.offre_id === selectedOffreId);
+  }, [recruiterCandidatures, selectedOffreId]);
 
   const filteredCandidatures = useMemo(() => {
     const list = scopedByOffre.filter((c) => {
@@ -702,9 +723,9 @@ export function CandidaturesOffreView({
             onChange={(e) => setSelectedOffreId(e.target.value)}
             className="rounded-xl border border-[#cbd5e1] bg-[#f8fafc] px-3.5 py-2 text-xs font-bold text-[#0f172a] outline-none focus:border-[#4f46e5]"
           >
-            <option value="ALL">Toutes les offres ({candidatures.length})</option>
-            {offres.map((o) => {
-              const count = candidatures.filter((c) => c.offre_id === o.id).length;
+            <option value="ALL">Toutes vos offres ({recruiterCandidatures.length})</option>
+            {recruiterOffres.map((o) => {
+              const count = recruiterCandidatures.filter((c) => c.offre_id === o.id).length;
               return (
                 <option key={o.id} value={o.id}>
                   {o.titre} ({count})
@@ -819,7 +840,7 @@ export function CandidaturesOffreView({
                 <th className="px-4 py-3.5">Poste visé</th>
                 <th className="px-4 py-3.5">CV déposé</th>
                 <th className="px-4 py-3.5">Analyse IA</th>
-                <th className="px-4 py-3.5">Statut</th>
+                <th className="px-4 py-3.5">Statut & Traitement</th>
                 <th className="py-3.5 pl-4 pr-6 text-right">Actions</th>
               </tr>
             </thead>
@@ -854,7 +875,28 @@ export function CandidaturesOffreView({
                     cvNom.includes('enonce') ||
                     (c.analyse?.resume && c.analyse.resume.toLowerCase().includes('document non conforme'));
 
-                  const score = isNonConforme ? 0 : (c.analyse?.score_correspondance ?? 78);
+                  // Compétences vérifiées pour le score tableau
+                  const rowReqSkills = c.offre?.competences_requises || ['React', 'Node.js', 'SQL'];
+                  const rowCandSkills = isNonConforme
+                    ? []
+                    : (c.analyse?.infos_extraites?.competences && c.analyse.infos_extraites.competences.length > 0
+                        ? c.analyse.infos_extraites.competences
+                        : (c.candidat?.competences || []));
+                  const rowMatched = isNonConforme
+                    ? []
+                    : rowReqSkills.filter((r) =>
+                        rowCandSkills.some(
+                          (cs) =>
+                            cs.toLowerCase().includes(r.toLowerCase()) ||
+                            r.toLowerCase().includes(cs.toLowerCase())
+                        )
+                      );
+
+                  const score = isNonConforme || rowMatched.length === 0
+                    ? 0
+                    : (c.analyse?.score_correspondance && c.analyse.score_correspondance > 0
+                        ? c.analyse.score_correspondance
+                        : Math.round((rowMatched.length / rowReqSkills.length) * 100));
 
                   return (
                     <tr key={c.id} className="hover:bg-[#f8fafc] transition">
@@ -944,8 +986,29 @@ export function CandidaturesOffreView({
                         </button>
                       </td>
 
-                      {/* Statut */}
-                      <td className="px-4 py-4">{getStatusBadge(c.statut)}</td>
+                      {/* Statut & Responsable du traitement */}
+                      <td className="px-4 py-4">
+                        <div className="space-y-1">
+                          {getStatusBadge(c.statut)}
+                          {c.statut !== 'RECUE' && (
+                            <div className="flex items-center gap-1 text-[11px] font-semibold text-[#475569]">
+                              <span className="size-1.5 rounded-full bg-[#594be0]" />
+                              <span>
+                                Traité par :{' '}
+                                <strong className="text-[#0f172a]">
+                                  {c.traitee_par_nom || (c.offre?.auteur ? `${c.offre.auteur.prenom} ${c.offre.auteur.nom}` : 'Équipe RH')}
+                                </strong>
+                              </span>
+                            </div>
+                          )}
+                          {c.date_entretien && (
+                            <div className="text-[10px] font-medium text-[#2563eb]">
+                              📅 Entretien le {c.date_entretien}
+                              {c.recruteur_entretien_nom && ` (avec ${c.recruteur_entretien_nom})`}
+                            </div>
+                          )}
+                        </div>
+                      </td>
 
                       {/* Actions épurées : uniquement Évaluer */}
                       <td className="py-4 pl-4 pr-6 text-right">
@@ -1035,7 +1098,6 @@ export function CandidaturesOffreView({
           (aiModalCand.analyse?.resume &&
             aiModalCand.analyse.resume.toLowerCase().includes('document non conforme'));
 
-        const score = isNonConforme ? 0 : (aiModalCand.analyse?.score_correspondance ?? 78);
         const reqSkills = aiModalCand.offre?.competences_requises || ['React', 'Node.js', 'SQL'];
         const candSkills = isNonConforme
           ? []
@@ -1054,6 +1116,13 @@ export function CandidaturesOffreView({
               )
             );
         const missing = isNonConforme ? reqSkills : reqSkills.filter((r) => !matched.includes(r));
+
+        // RÈGLE STRICTE : Si 0 compétence requise détectée dans le CV, le score DOIT être 0%
+        const score = isNonConforme || matched.length === 0
+          ? 0
+          : (aiModalCand.analyse?.score_correspondance && aiModalCand.analyse.score_correspondance > 0
+              ? aiModalCand.analyse.score_correspondance
+              : Math.round((matched.length / reqSkills.length) * 100));
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
