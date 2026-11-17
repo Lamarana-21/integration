@@ -14,7 +14,11 @@ const nextConfig = {
       },
     ],
   },
-  // Proxy des appels API vers le backend Laravel (évite les problèmes CORS en dev)
+  // Désactive ou configure l'indicateur de développement Next.js (Toast "N Insights")
+  devIndicators: {
+    appIsrStatus: false,
+    buildActivity: true,
+  },
   async rewrites() {
     return [
       {

@@ -161,3 +161,30 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Réduire le badge d'indicateur Next.js dev à sa seule icône sans le texte "Insight" */
+nextjs-portal,
+div[data-nextjs-toast-wrapper],
+[data-nextjs-dev-overlay] {
+  font-size: 0 !important;
+}
+
+nextjs-portal button,
+div[data-nextjs-toast-wrapper] button,
+[data-nextjs-toast] {
+  padding: 6px !important;
+  font-size: 0 !important;
+}
+
+nextjs-portal svg,
+div[data-nextjs-toast-wrapper] svg,
+[data-nextjs-toast] svg {
+  display: inline-block !important;
+}
+
+/* Masquer le texte "Insight" et la croix de fermeture */
+nextjs-portal span,
+div[data-nextjs-toast-wrapper] span:not(:has(svg)),
+[data-nextjs-toast] span {
+  display: none !important;
+}
