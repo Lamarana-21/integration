@@ -85,6 +85,8 @@ export function OffresPubliquesView({
 
       if (currentRole === 'VISITEUR' || currentRole === 'CANDIDAT') {
         if (offre.statut !== 'PUBLIEE') return false;
+        // Si l'entreprise est explicitement désactivée, ne pas l'afficher au candidat
+        if (offre.entreprise?.statut === 'DESACTIVEE') return false;
       }
 
       if (searchTerm) {

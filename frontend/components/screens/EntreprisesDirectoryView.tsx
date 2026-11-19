@@ -54,22 +54,30 @@ export function EntreprisesDirectoryView({
 
   const isAdmin = currentRole === 'ADMIN';
 
+  // Les candidats et visiteurs ne doivent voir que les entreprises actives
+  const visibleEntreprises = useMemo(() => {
+    if (isAdmin) {
+      return entreprises;
+    }
+    return entreprises.filter((e) => e.statut !== 'DESACTIVEE');
+  }, [entreprises, isAdmin]);
+
   // Extraire les villes et secteurs uniques
   const villes = useMemo(() => {
     const set = new Set<string>();
-    entreprises.forEach((e) => {
+    visibleEntreprises.forEach((e) => {
       if (e.ville) set.add(e.ville.trim());
     });
     return Array.from(set);
-  }, [entreprises]);
+  }, [visibleEntreprises]);
 
   const secteurs = useMemo(() => {
     const set = new Set<string>();
-    entreprises.forEach((e) => {
+    visibleEntreprises.forEach((e) => {
       if (e.secteur) set.add(e.secteur.trim());
     });
     return Array.from(set);
-  }, [entreprises]);
+  }, [visibleEntreprises]);
 
   const totalOpenJobs = useMemo(
     () => offres.filter((o) => o.statut === 'PUBLIEE').length,
@@ -77,7 +85,7 @@ export function EntreprisesDirectoryView({
   );
 
   const filteredEntreprises = useMemo(() => {
-    return entreprises.filter((e) => {
+    return visibleEntreprises.filter((e) => {
       if (selectedVille !== 'TOUTES' && e.ville?.trim().toLowerCase() !== selectedVille.toLowerCase()) {
         return false;
       }
@@ -104,7 +112,7 @@ export function EntreprisesDirectoryView({
       }
       return true;
     });
-  }, [entreprises, offres, search, selectedVille, selectedSecteur, onlyRecruiting]);
+  }, [visibleEntreprises, offres, search, selectedVille, selectedSecteur, onlyRecruiting]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 space-y-8">

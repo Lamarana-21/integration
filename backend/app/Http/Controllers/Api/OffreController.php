@@ -21,10 +21,17 @@ class OffreController extends Controller
         $query = Offre::with(['entreprise', 'auteur'])
             ->withCount('candidatures');
 
-        // Pour un visiteur ou candidat, appliquer strictement RM1
+        // Pour un visiteur ou candidat, appliquer strictement RM1 et masquer les offres d'entreprises désactivées
         $user = $request->user();
+        if (!$user && $request->header('X-User-Id')) {
+            $user = User::find($request->header('X-User-Id'));
+        }
+
         if (!$user || $user->isCandidat()) {
-            $query->publieesEtActives();
+            $query->publieesEtActives()
+                  ->whereHas('entreprise', function ($eq) {
+                      $eq->where('statut', 'ACTIVE');
+                  });
         } else if ($user->isRecruteur() && $request->boolean('mes_offres')) {
             // Filtrer sur son entreprise
             $query->where('entreprise_id', $user->entreprise_id);

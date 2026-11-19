@@ -9,7 +9,6 @@ import {
   Globe,
   Plus,
   Power,
-  Trash2,
   Users,
   X,
 } from 'lucide-react';
@@ -18,7 +17,7 @@ import { Entreprise } from '@/lib/types';
 interface AdminEntreprisesViewProps {
   entreprises: Entreprise[];
   onToggleStatus: (id: string) => void;
-  onDeleteEntreprise: (id: string) => void;
+  onDeleteEntreprise?: (id: string) => void;
   onAddEntreprise: (data: Partial<Entreprise>) => void;
   onViewCompany: (entreprise: Entreprise) => void;
 }
@@ -147,13 +146,6 @@ export function AdminEntreprisesView({
                       }`}
                     >
                       <Power size={14} />
-                    </button>
-                    <button
-                      onClick={() => onDeleteEntreprise(ent.id)}
-                      title="Supprimer"
-                      className="rounded-lg p-1.5 text-[#98a1b6] hover:text-[#cf3b3b]"
-                    >
-                      <Trash2 size={14} />
                     </button>
                   </div>
                 </td>

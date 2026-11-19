@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Entreprise;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -14,6 +15,11 @@ class EntrepriseController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if (!$user && $request->header('X-User-Id')) {
+            $user = User::find($request->header('X-User-Id'));
+        }
+
         $query = Entreprise::withCount([
             'recruteurs',
             'offres as offres_actives_count' => function ($q) {
@@ -21,7 +27,10 @@ class EntrepriseController extends Controller
             }
         ]);
 
-        if ($request->filled('statut')) {
+        // Pour un candidat ou un visiteur non-admin, n'afficher que les entreprises actives
+        if (!$user || $user->isCandidat()) {
+            $query->where('statut', 'ACTIVE');
+        } elseif ($request->filled('statut')) {
             $query->where('statut', $request->statut);
         }
 
