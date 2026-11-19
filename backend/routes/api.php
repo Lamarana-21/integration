@@ -60,6 +60,7 @@ Route::get('/companies', [EntrepriseController::class, 'index']);
 Route::post('/companies', [EntrepriseController::class, 'store']);
 Route::get('/companies/{id}', [EntrepriseController::class, 'show']);
 Route::patch('/companies/{id}', [EntrepriseController::class, 'update']);
+Route::patch('/companies/{id}/toggle-statut', [EntrepriseController::class, 'toggleStatut']);
 Route::delete('/companies/{id}', [EntrepriseController::class, 'destroy']);
 Route::get('/users', [UserController::class, 'index']);
 Route::post('/users', [UserController::class, 'store']);

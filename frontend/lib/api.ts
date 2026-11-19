@@ -664,8 +664,15 @@ class ApiClient {
     });
   }
 
-  public async toggleEntrepriseStatus(id: string, statut: 'ACTIVE' | 'DESACTIVEE'): Promise<ApiResponse<{ entreprise: Entreprise }>> {
-    return this.request<{ entreprise: Entreprise }>(`/companies/${id}`, {
+  public async toggleEntrepriseStatus(id: string, statut?: 'ACTIVE' | 'DESACTIVEE'): Promise<ApiResponse<{ entreprise: Entreprise; message?: string }>> {
+    // Essaie d'abord la route dédiée toggle-statut
+    const toggleRes = await this.request<{ entreprise: Entreprise; message?: string }>(`/companies/${id}/toggle-statut`, {
+      method: 'PATCH',
+    });
+    if (toggleRes.success) return toggleRes;
+
+    // En fallback, effectue une mise à jour directe via PATCH
+    return this.request<{ entreprise: Entreprise; message?: string }>(`/companies/${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ statut }),
     });

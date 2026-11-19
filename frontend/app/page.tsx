@@ -33,6 +33,7 @@ import {
   Candidat,
   Candidature,
   ChatMessage,
+  CompanyStatus,
   Conversation,
   Entreprise,
   JobStatus,
@@ -65,6 +66,7 @@ import { api } from '@/lib/api';
 
 const DEPOSITED_CVS_STORAGE_KEY = 'talenta_deposited_cvs_v2';
 const DECISIONS_STORAGE_KEY = 'talenta_decisions_v2';
+const COMPANIES_STORAGE_KEY = 'talenta_companies_v2';
 
 interface StoredDecision {
   statut: ApplicationStatus;
@@ -580,7 +582,12 @@ export default function AppRoot() {
     // Synchronisation dynamique des entreprises si navigation vers Entreprises (E11) ou Admin (E14)
     if (screen === 'E11' || screen === 'E14') {
       api.getEntreprises().then((dbEnts) => {
-        if (dbEnts && dbEnts.length > 0) setEntreprises(dbEnts);
+        if (dbEnts && dbEnts.length > 0) {
+          setEntreprises(dbEnts);
+          try {
+            localStorage.setItem(COMPANIES_STORAGE_KEY, JSON.stringify(dbEnts));
+          } catch {}
+        }
       }).catch(() => {});
     }
 
@@ -758,7 +765,12 @@ export default function AppRoot() {
             setOffres(dbOffres);
           }
           if (dbCands && dbCands.length > 0) setCandidatures(hydrateCandidaturesWithDepositedCvs(dbCands));
-          if (dbEnts && dbEnts.length > 0) setEntreprises(dbEnts);
+          if (dbEnts && dbEnts.length > 0) {
+            setEntreprises(dbEnts);
+            try {
+              localStorage.setItem(COMPANIES_STORAGE_KEY, JSON.stringify(dbEnts));
+            } catch {}
+          }
           if (dbRoles && dbRoles.length > 0) setRoles(dbRoles);
           if (dbPerms && dbPerms.length > 0) setAllPermissions(dbPerms);
           if (dbNotifs && dbNotifs.length > 0) setNotifications(dbNotifs);
@@ -767,8 +779,15 @@ export default function AppRoot() {
           console.warn('Chargement des données MySQL:', err);
         });
 
-      // Restauration des conversations, messages et décisions dynamiques
+      // Restauration des entreprises, conversations, messages et décisions dynamiques
       try {
+        const savedEnts = localStorage.getItem(COMPANIES_STORAGE_KEY);
+        if (savedEnts) {
+          const parsedEnts = JSON.parse(savedEnts);
+          if (Array.isArray(parsedEnts) && parsedEnts.length > 0) {
+            setEntreprises(parsedEnts);
+          }
+        }
         const savedConvs = localStorage.getItem('talenta_conversations_v2');
         const savedMsgs = localStorage.getItem('talenta_messages_v2');
         if (savedConvs) setConversations(JSON.parse(savedConvs));
@@ -782,11 +801,16 @@ export default function AppRoot() {
     }
   }, []);
 
-  // Synchronisation inter-onglets en temps réel (décisions recruteur, CV déposés, messagerie)
+  // Synchronisation inter-onglets en temps réel (décisions recruteur, CV déposés, messagerie, entreprises)
   useEffect(() => {
     const handleStorageSync = (e: StorageEvent) => {
       if (e.key === DECISIONS_STORAGE_KEY || e.key === DEPOSITED_CVS_STORAGE_KEY) {
         setCandidatures((prev) => hydrateCandidaturesWithDepositedCvs(prev));
+      } else if (e.key === COMPANIES_STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setEntreprises(parsed);
+        } catch {}
       } else if (e.key === 'talenta_conversations_v2' && e.newValue) {
         try {
           setConversations(JSON.parse(e.newValue));
@@ -2885,25 +2909,45 @@ export default function AppRoot() {
               onToggleStatus={async (entId) => {
                 const ent = entreprises.find((e) => e.id === entId);
                 if (!ent) return;
-                const newStatut = ent.statut === 'ACTIVE' ? 'DESACTIVEE' : 'ACTIVE';
-                await api.toggleEntrepriseStatus(entId, newStatut).catch(() => {});
-                setEntreprises((prev) =>
-                  prev.map((e) =>
-                    e.id === entId ? { ...e, statut: newStatut } : e
-                  )
+                const newStatut: CompanyStatus = ent.statut === 'ACTIVE' ? 'DESACTIVEE' : 'ACTIVE';
+                const nextList: Entreprise[] = entreprises.map((e) =>
+                  e.id === entId ? { ...e, statut: newStatut } : e
                 );
+                setEntreprises(nextList);
+                try {
+                  localStorage.setItem(COMPANIES_STORAGE_KEY, JSON.stringify(nextList));
+                } catch {}
+
+                try {
+                  await api.toggleEntrepriseStatus(entId, newStatut);
+                } catch (err) {
+                  console.warn('Erreur toggle statut entreprise:', err);
+                }
               }}
               onDeleteEntreprise={async (entId) => {
                 await api.deleteEntreprise(entId).catch(() => {});
-                setEntreprises((prev) => prev.filter((e) => e.id !== entId));
+                const nextList = entreprises.filter((e) => e.id !== entId);
+                setEntreprises(nextList);
+                try {
+                  localStorage.setItem(COMPANIES_STORAGE_KEY, JSON.stringify(nextList));
+                } catch {}
               }}
               onAddEntreprise={async (entData) => {
                 const res = await api.createEntreprise(entData);
                 if (res.success && res.data && res.data.entreprise) {
                   const created = res.data.entreprise;
-                  setEntreprises((prev) => [created, ...prev.filter((e) => e.id !== created.id)]);
+                  const nextList = [created, ...entreprises.filter((e) => e.id !== created.id)];
+                  setEntreprises(nextList);
+                  try {
+                    localStorage.setItem(COMPANIES_STORAGE_KEY, JSON.stringify(nextList));
+                  } catch {}
                   api.getEntreprises().then((fresh) => {
-                    if (fresh && fresh.length > 0) setEntreprises(fresh);
+                    if (fresh && fresh.length > 0) {
+                      setEntreprises(fresh);
+                      try {
+                        localStorage.setItem(COMPANIES_STORAGE_KEY, JSON.stringify(fresh));
+                      } catch {}
+                    }
                   }).catch(() => {});
                 } else {
                   const newEnt: Entreprise = {
@@ -2916,7 +2960,11 @@ export default function AppRoot() {
                     offres_count: 0,
                     recruteurs_count: 1,
                   };
-                  setEntreprises((prev) => [newEnt, ...prev]);
+                  const nextList = [newEnt, ...entreprises];
+                  setEntreprises(nextList);
+                  try {
+                    localStorage.setItem(COMPANIES_STORAGE_KEY, JSON.stringify(nextList));
+                  } catch {}
                 }
               }}
               onViewCompany={(ent) => {

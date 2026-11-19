@@ -129,6 +129,21 @@ class EntrepriseController extends Controller
     }
 
     /**
+     * Basculer le statut d'une entreprise (ACTIVE <-> DESACTIVEE)
+     */
+    public function toggleStatut(string $id): JsonResponse
+    {
+        $entreprise = Entreprise::findOrFail($id);
+        $nouveauStatut = $entreprise->statut === 'ACTIVE' ? 'DESACTIVEE' : 'ACTIVE';
+        $entreprise->update(['statut' => $nouveauStatut]);
+
+        return response()->json([
+            'message' => "L'entreprise est désormais " . ($nouveauStatut === 'ACTIVE' ? 'Active' : 'Désactivée'),
+            'entreprise' => $entreprise,
+        ]);
+    }
+
+    /**
      * Module 4.6 : Désactiver ou supprimer une entreprise
      */
     public function destroy(string $id): JsonResponse
