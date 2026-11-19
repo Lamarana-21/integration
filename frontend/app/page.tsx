@@ -579,6 +579,17 @@ export default function AppRoot() {
       }
     }
 
+    // Si la route est E11 et que l'utilisateur est un RECRUTEUR, le rediriger vers la fiche de son entreprise directement
+    if (screen === 'E11' && currentRole === 'RECRUTEUR') {
+      const recCompany =
+        entreprises.find(
+          (e) => e.id === currentUser?.entreprise_id || e.id === currentUser?.entreprise?.id
+        ) || entreprises.find((e) => e.nom.toLowerCase().includes('ousmane')) || entreprises[0];
+      if (recCompany) {
+        setSelectedEntrepriseForDetail(recCompany);
+      }
+    }
+
     // Synchronisation dynamique des entreprises si navigation vers Entreprises (E11) ou Admin (E14)
     if (screen === 'E11' || screen === 'E14') {
       api.getEntreprises().then((dbEnts) => {
@@ -2632,7 +2643,11 @@ export default function AppRoot() {
           {activeScreen === 'E11' && selectedEntrepriseForDetail && (
             <FicheEntrepriseView
               entreprise={selectedEntrepriseForDetail}
-              allEntreprises={entreprises}
+              allEntreprises={
+                currentRole === 'RECRUTEUR'
+                  ? [selectedEntrepriseForDetail]
+                  : entreprises
+              }
               onSelectEntreprise={(ent) => setSelectedEntrepriseForDetail(ent)}
               offres={offres.filter(
                 (o) => o.entreprise_id === selectedEntrepriseForDetail.id || o.entreprise?.id === selectedEntrepriseForDetail.id
@@ -2700,7 +2715,16 @@ export default function AppRoot() {
           {/* Annuaire des Entreprises Partenaires (accessible à tous, liste dynamique) */}
           {activeScreen === 'E11' && !selectedEntrepriseForDetail && (
             <EntreprisesDirectoryView
-              entreprises={entreprises}
+              entreprises={
+                currentRole === 'RECRUTEUR'
+                  ? entreprises.filter(
+                      (e) =>
+                        e.id === currentUser?.entreprise_id ||
+                        e.id === currentUser?.entreprise?.id ||
+                        e.nom.toLowerCase().includes('ousmane')
+                    )
+                  : entreprises
+              }
               offres={offres}
               users={users}
               currentRole={currentRole}
@@ -3067,11 +3091,22 @@ export default function AppRoot() {
               entreprise={
                 entreprises.find(
                   (e) => e.id === currentUser.entreprise_id || e.id === currentUser.entreprise?.id
-                ) || entreprises[0]
+                ) || entreprises.find((e) => e.nom.toLowerCase().includes('ousmane')) || entreprises[0]
               }
               offres={offres}
               onUpdateProfile={handleUpdateUserProfile}
-              onNavigateScreen={handleNavigate}
+              onNavigateScreen={(screen) => {
+                if (screen === 'E11') {
+                  const myEnt =
+                    entreprises.find(
+                      (e) => e.id === currentUser.entreprise_id || e.id === currentUser.entreprise?.id
+                    ) || entreprises.find((e) => e.nom.toLowerCase().includes('ousmane')) || entreprises[0];
+                  if (myEnt) {
+                    setSelectedEntrepriseForDetail(myEnt);
+                  }
+                }
+                handleNavigate(screen);
+              }}
             />
           )}
         </main>
