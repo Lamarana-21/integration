@@ -89,10 +89,13 @@ class CandidatureService
                 }
             }
 
-            // Déclenchement facultatif de l'analyse IA
-            if ($this->aiService && !empty($data['trigger_ai_analysis'])) {
+            // Déclenchement automatique de l'analyse IA du CV déposé
+            if ($this->aiService) {
                 try {
-                    $this->aiService->analyser($candidature);
+                    $cvInstance = Cv::find($cvId);
+                    if ($cvInstance) {
+                        $this->aiService->analyser($cvInstance, $candidature);
+                    }
                 } catch (\Throwable $e) {
                     Log::warning('Erreur analyse IA candidature: ' . $e->getMessage());
                 }

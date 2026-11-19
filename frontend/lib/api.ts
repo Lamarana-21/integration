@@ -27,9 +27,20 @@ import {
   INITIAL_CANDIDATS,
 } from './initialData';
 
-// ─── Configuration ──────────────────────────────────────────────────────────
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000/api';
+// ─── Configuration dynamique (PC + Mobile / Réseau Wi-Fi local) ────────────
+function resolveApiBase(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const host = window.location.hostname;
+    // Sur mobile connecté au Wi-Fi (ex: 192.168.1.X:3000), pointe automatiquement vers 192.168.1.X:8000/api
+    if (host !== 'localhost' && host !== '127.0.0.1') {
+      return `http://${host}:8000/api`;
+    }
+  }
+  return 'http://127.0.0.1:8000/api';
+}
 
 // ─── Types internes ──────────────────────────────────────────────────────────
 export interface ApiError {
@@ -72,7 +83,7 @@ class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
-    const url = `${API_BASE}${endpoint}`;
+    const url = `${resolveApiBase()}${endpoint}`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'application/json',
@@ -116,7 +127,7 @@ class ApiClient {
   // ── Santé du backend ────────────────────────────────────────────────────
   public async checkBackendHealth(): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/jobs`, {
+      const res = await fetch(`${resolveApiBase()}/jobs`, {
         signal: AbortSignal.timeout(2000),
         headers: { Accept: 'application/json' },
       });
@@ -406,7 +417,7 @@ class ApiClient {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/candidates/cvs`, {
+      const res = await fetch(`${resolveApiBase()}/candidates/cvs`, {
         method: 'POST',
         headers,
         body: formData,

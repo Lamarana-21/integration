@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   title: 'Talenta — Recruitment OS',
   description: 'Plateforme intelligente de gestion du recrutement, des offres et des candidatures.',
   generator: 'v0.app',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Talenta',
+  },
   icons: {
     icon: [
       {
@@ -18,11 +24,11 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
   colorScheme: 'light dark',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: 'black' },
-  ],
+  themeColor: '#594be0',
 }
 
 export default function RootLayout({

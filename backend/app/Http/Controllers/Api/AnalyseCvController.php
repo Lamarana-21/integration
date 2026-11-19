@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AnalyseCv;
+use App\Models\Candidature;
 use App\Models\Cv;
 use App\Services\AiCvAnalysisService;
 use Illuminate\Http\JsonResponse;
@@ -18,12 +19,28 @@ class AnalyseCvController extends Controller
         $this->aiService = $aiService;
     }
 
-    
     public function relancer(string $id): JsonResponse
     {
-        $ancienne = AnalyseCv::with(['cv.candidat', 'candidature.offre'])->findOrFail($id);
+        // Supporte à la fois un ID d'AnalyseCv ou un ID de Candidature
+        $ancienne = AnalyseCv::with(['cv.candidat', 'candidature.offre'])->find($id);
+        if ($ancienne && $ancienne->cv) {
+            $nouvelle = $this->aiService->analyser($ancienne->cv, $ancienne->candidature);
+            return response()->json([
+                'message' => 'Analyse IA actualisée avec succès',
+                'analyse' => $nouvelle,
+            ]);
+        }
 
-        $nouvelle = $this->aiService->analyser($ancienne->cv, $ancienne->candidature);
+        $candidature = Candidature::with(['cv.candidat', 'offre', 'candidat'])->findOrFail($id);
+        $cv = $candidature->cv ?: $candidature->candidat?->cvs()->latest()->first();
+
+        if (!$cv) {
+            return response()->json([
+                'message' => 'Aucun CV associé à cette candidature',
+            ], 404);
+        }
+
+        $nouvelle = $this->aiService->analyser($cv, $candidature);
 
         return response()->json([
             'message' => 'Analyse IA actualisée avec succès',

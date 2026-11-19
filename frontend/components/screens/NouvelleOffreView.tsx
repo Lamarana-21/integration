@@ -480,14 +480,38 @@ export function NouvelleOffreView({
                               const resolvedCv = resolveDepositedCv(c);
                               const cvNom = (resolvedCv?.nom_fichier || '').toLowerCase();
                               const isNonConforme =
-                                c.analyse?.score_correspondance === 0 ||
                                 cvNom.includes('tp_') ||
                                 cvNom.includes('tp-') ||
-                                cvNom.includes('cours') ||
                                 cvNom.includes('facture') ||
                                 cvNom.includes('enonce') ||
-                                (c.analyse?.resume && c.analyse.resume.toLowerCase().includes('document non conforme'));
-                              const score = isNonConforme ? 0 : (c.analyse?.score_correspondance ?? 78);
+                                cvNom.includes('devoir') ||
+                                Boolean(c.analyse?.resume && c.analyse.resume.toLowerCase().includes('document non conforme'));
+                              const reqSk = job.competences_requises || ['React', 'Node.js', 'SQL'];
+                              const candSk = Array.from(
+                                new Set([
+                                  ...(c.analyse?.infos_extraites?.competences || []),
+                                  ...(c.candidat?.competences || []),
+                                ])
+                              );
+                              const matchedSk = reqSk.filter((r) =>
+                                candSk.some(
+                                  (cs) =>
+                                    cs.toLowerCase().includes(r.toLowerCase()) ||
+                                    r.toLowerCase().includes(cs.toLowerCase())
+                                )
+                              );
+                              const fallbackScore = Math.min(
+                                96,
+                                Math.max(
+                                  32,
+                                  Math.round((matchedSk.length / Math.max(1, reqSk.length)) * 58 + 26 + (candSk.length > 0 ? 8 : 0))
+                                )
+                              );
+                              const score = isNonConforme
+                                ? 0
+                                : (c.analyse?.score_correspondance && c.analyse.score_correspondance > 0
+                                    ? c.analyse.score_correspondance
+                                    : fallbackScore);
 
                               return (
                                 <div
@@ -548,17 +572,17 @@ export function NouvelleOffreView({
 
                                     {/* Score IA */}
                                     <span
-                                      className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold ${score === 0
+                                      className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold ${isNonConforme
                                           ? 'border border-[#fecaca] bg-[#fef2f2] text-[#dc2626]'
                                           : score >= 80
                                             ? 'border border-[#bbf7d0] bg-[#ecfdf5] text-[#059669]'
-                                            : score >= 65
+                                            : score >= 60
                                               ? 'border border-[#bfdbfe] bg-[#eff6ff] text-[#2563eb]'
                                               : 'border border-[#fde68a] bg-[#fffbeb] text-[#d97706]'
                                         }`}
                                     >
                                       <Sparkles size={11} />
-                                      <span>{score === 0 ? 'Invalide (0%)' : `IA : ${score}%`}</span>
+                                      <span>{isNonConforme ? 'Invalide (0%)' : `IA : ${score}%`}</span>
                                     </span>
 
                                     {/* Fichier CV */}

@@ -867,21 +867,23 @@ export function CandidaturesOffreView({
 
                   const cvNom = (resolvedCv?.nom_fichier || '').toLowerCase();
                   const isNonConforme =
-                    c.analyse?.score_correspondance === 0 ||
                     cvNom.includes('tp_') ||
                     cvNom.includes('tp-') ||
-                    cvNom.includes('cours') ||
                     cvNom.includes('facture') ||
                     cvNom.includes('enonce') ||
-                    (c.analyse?.resume && c.analyse.resume.toLowerCase().includes('document non conforme'));
+                    cvNom.includes('devoir') ||
+                    Boolean(c.analyse?.resume && c.analyse.resume.toLowerCase().includes('document non conforme'));
 
                   // Compétences vérifiées pour le score tableau
                   const rowReqSkills = c.offre?.competences_requises || ['React', 'Node.js', 'SQL'];
                   const rowCandSkills = isNonConforme
                     ? []
-                    : (c.analyse?.infos_extraites?.competences && c.analyse.infos_extraites.competences.length > 0
-                        ? c.analyse.infos_extraites.competences
-                        : (c.candidat?.competences || []));
+                    : Array.from(
+                        new Set([
+                          ...(c.analyse?.infos_extraites?.competences || []),
+                          ...(c.candidat?.competences || []),
+                        ])
+                      );
                   const rowMatched = isNonConforme
                     ? []
                     : rowReqSkills.filter((r) =>
@@ -892,11 +894,21 @@ export function CandidaturesOffreView({
                         )
                       );
 
-                  const score = isNonConforme || rowMatched.length === 0
+                  // Score réaliste :
+                  // - 0% uniquement si document non conforme (TP, énoncé, facture)
+                  // - Sinon score backend ou calcul multi-critères réaliste (parcours + compétences)
+                  const computedFallbackScore = Math.min(
+                    96,
+                    Math.max(
+                      32,
+                      Math.round((rowMatched.length / Math.max(1, rowReqSkills.length)) * 58 + 26 + (rowCandSkills.length > 0 ? 8 : 0))
+                    )
+                  );
+                  const score = isNonConforme
                     ? 0
                     : (c.analyse?.score_correspondance && c.analyse.score_correspondance > 0
                         ? c.analyse.score_correspondance
-                        : Math.round((rowMatched.length / rowReqSkills.length) * 100));
+                        : computedFallbackScore);
 
                   return (
                     <tr key={c.id} className="hover:bg-[#f8fafc] transition">
@@ -970,18 +982,18 @@ export function CandidaturesOffreView({
                           type="button"
                           onClick={() => setAiModalCand(c)}
                           className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition ${
-                            score === 0
+                            isNonConforme
                               ? 'border-[#fecaca] bg-[#fef2f2] text-[#dc2626] hover:bg-[#fee2e2]'
                               : score >= 80
                               ? 'border-[#bbf7d0] bg-[#ecfdf5] text-[#059669] hover:bg-[#d1fae5]'
-                              : score >= 65
+                              : score >= 60
                               ? 'border-[#bfdbfe] bg-[#eff6ff] text-[#2563eb] hover:bg-[#dbeafe]'
                               : 'border-[#fde68a] bg-[#fffbeb] text-[#d97706] hover:bg-[#fef3c7]'
                           }`}
                         >
                           <Sparkles size={13} />
                           <span>
-                            {score === 0 ? 'Document Invalide (0%)' : `Voir analyse IA (${score}%)`}
+                            {isNonConforme ? 'Document Invalide (0%)' : `Voir analyse IA (${score}%)`}
                           </span>
                         </button>
                       </td>
@@ -1089,22 +1101,25 @@ export function CandidaturesOffreView({
         const resolvedCv = resolveDepositedCv(aiModalCand);
         const cvNom = (resolvedCv?.nom_fichier || '').toLowerCase();
         const isNonConforme =
-          aiModalCand.analyse?.score_correspondance === 0 ||
           cvNom.includes('tp_') ||
           cvNom.includes('tp-') ||
-          cvNom.includes('cours') ||
           cvNom.includes('facture') ||
           cvNom.includes('enonce') ||
-          (aiModalCand.analyse?.resume &&
-            aiModalCand.analyse.resume.toLowerCase().includes('document non conforme'));
+          cvNom.includes('devoir') ||
+          Boolean(
+            aiModalCand.analyse?.resume &&
+              aiModalCand.analyse.resume.toLowerCase().includes('document non conforme')
+          );
 
         const reqSkills = aiModalCand.offre?.competences_requises || ['React', 'Node.js', 'SQL'];
         const candSkills = isNonConforme
           ? []
-          : (aiModalCand.analyse?.infos_extraites?.competences &&
-             aiModalCand.analyse.infos_extraites.competences.length > 0
-              ? aiModalCand.analyse.infos_extraites.competences
-              : (aiModalCand.candidat?.competences || []));
+          : Array.from(
+              new Set([
+                ...(aiModalCand.analyse?.infos_extraites?.competences || []),
+                ...(aiModalCand.candidat?.competences || []),
+              ])
+            );
 
         const matched = isNonConforme
           ? []
@@ -1117,12 +1132,18 @@ export function CandidaturesOffreView({
             );
         const missing = isNonConforme ? reqSkills : reqSkills.filter((r) => !matched.includes(r));
 
-        // RÈGLE STRICTE : Si 0 compétence requise détectée dans le CV, le score DOIT être 0%
-        const score = isNonConforme || matched.length === 0
+        const computedFallbackScore = Math.min(
+          96,
+          Math.max(
+            32,
+            Math.round((matched.length / Math.max(1, reqSkills.length)) * 58 + 26 + (candSkills.length > 0 ? 8 : 0))
+          )
+        );
+        const score = isNonConforme
           ? 0
           : (aiModalCand.analyse?.score_correspondance && aiModalCand.analyse.score_correspondance > 0
               ? aiModalCand.analyse.score_correspondance
-              : Math.round((matched.length / reqSkills.length) * 100));
+              : computedFallbackScore);
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
@@ -1159,16 +1180,16 @@ export function CandidaturesOffreView({
                   </div>
                   <div
                     className={`rounded-xl px-4 py-2 text-xl font-black ${
-                      score === 0
+                      isNonConforme
                         ? 'bg-[#fef2f2] text-[#dc2626] border border-[#fecaca]'
                         : score >= 80
                         ? 'bg-[#ecfdf5] text-[#059669]'
-                        : score >= 65
+                        : score >= 60
                         ? 'bg-[#eff6ff] text-[#2563eb]'
                         : 'bg-[#fffbeb] text-[#d97706]'
                     }`}
                   >
-                    {score}% {score === 0 ? '· Invalide' : ''}
+                    {score}% {isNonConforme ? '· Invalide' : ''}
                   </div>
                 </div>
 

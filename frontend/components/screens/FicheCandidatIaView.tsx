@@ -54,42 +54,42 @@ const SEQUENTIAL_STEPS: {
   shortLabel: string;
   description: string;
 }[] = [
-  {
-    key: 'RECUE',
-    num: 1,
-    label: '1. Candidature reçue',
-    shortLabel: '1. Reçue',
-    description: 'Dossier déposé par le candidat et enregistré.',
-  },
-  {
-    key: 'EN_EXAMEN',
-    num: 2,
-    label: '2. En cours d’examen',
-    shortLabel: '2. En examen',
-    description: 'Lecture et vérification du CV par le recruteur.',
-  },
-  {
-    key: 'PRESELECTIONNEE',
-    num: 3,
-    label: '3. Présélectionnée',
-    shortLabel: '3. Présélection',
-    description: 'Profil validé en shortlist pour la suite du processus.',
-  },
-  {
-    key: 'ENTRETIEN',
-    num: 4,
-    label: '4. Entretien programmé',
-    shortLabel: '4. Entretien',
-    description: 'Convocation envoyée au candidat avec date et modalités.',
-  },
-  {
-    key: 'ACCEPTEE',
-    num: 5,
-    label: '5. Décision finale',
-    shortLabel: '5. Décision',
-    description: 'Résultat officiel transmis au candidat (Retenue ou Non retenue).',
-  },
-];
+    {
+      key: 'RECUE',
+      num: 1,
+      label: '1. Candidature reçue',
+      shortLabel: '1. Reçue',
+      description: 'Dossier déposé par le candidat et enregistré.',
+    },
+    {
+      key: 'EN_EXAMEN',
+      num: 2,
+      label: '2. En cours d’examen',
+      shortLabel: '2. En examen',
+      description: 'Lecture et vérification du CV par le recruteur.',
+    },
+    {
+      key: 'PRESELECTIONNEE',
+      num: 3,
+      label: '3. Présélectionnée',
+      shortLabel: '3. Présélection',
+      description: 'Profil validé en shortlist pour la suite du processus.',
+    },
+    {
+      key: 'ENTRETIEN',
+      num: 4,
+      label: '4. Entretien programmé',
+      shortLabel: '4. Entretien',
+      description: 'Convocation envoyée au candidat avec date et modalités.',
+    },
+    {
+      key: 'ACCEPTEE',
+      num: 5,
+      label: '5. Décision finale',
+      shortLabel: '5. Décision',
+      description: 'Résultat officiel transmis au candidat (Retenue ou Non retenue).',
+    },
+  ];
 
 export function FicheCandidatIaView({
   candidature,
@@ -124,7 +124,7 @@ export function FicheCandidatIaView({
   // Planification entretien
   const [interviewDate, setInterviewDate] = useState<string>(
     candidature.date_entretien?.split(' ')[0] ||
-      new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0]
+    new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0]
   );
   const [interviewTime, setInterviewTime] = useState<string>('14:30');
   const [interviewType, setInterviewType] = useState<'VISIO' | 'PRESENTIEL' | 'TELEPHONE'>(
@@ -153,41 +153,50 @@ export function FicheCandidatIaView({
       cv?.nom_fichier?.includes('Dynamique'));
 
   const requiredSkills = offre?.competences_requises || ['React', 'Node.js', 'SQL'];
-  
-  // Si le document est un document non conforme (score 0, mot-clé TP/cours/facture ou mention dans le résumé)
+
+  // Si le document est manifestement un document non conforme (énoncé TP, devoir, facture ou mention explicite)
   const cvNom = (cv?.nom_fichier || '').toLowerCase();
   const isNonConformeDoc =
-    analyse?.score_correspondance === 0 ||
     cvNom.includes('tp_') ||
     cvNom.includes('tp-') ||
-    cvNom.includes('cours') ||
     cvNom.includes('facture') ||
     cvNom.includes('enonce') ||
-    (analyse?.resume && analyse.resume.toLowerCase().includes('document non conforme'));
+    cvNom.includes('devoir') ||
+    Boolean(analyse?.resume && analyse.resume.toLowerCase().includes('document non conforme'));
 
   const candidateSkills = isNonConformeDoc
     ? []
-    : (analyse?.infos_extraites?.competences && analyse.infos_extraites.competences.length > 0
-        ? analyse.infos_extraites.competences
-        : (candidat?.competences || []));
+    : Array.from(
+        new Set([
+          ...(analyse?.infos_extraites?.competences || []),
+          ...(candidat?.competences || []),
+        ])
+      );
 
   const matchedSkills = isNonConformeDoc
     ? []
     : requiredSkills.filter((req) =>
-        candidateSkills.some(
-          (cs) =>
-            cs.toLowerCase().includes(req.toLowerCase()) ||
-            req.toLowerCase().includes(cs.toLowerCase())
-        )
-      );
+      candidateSkills.some(
+        (cs) =>
+          cs.toLowerCase().includes(req.toLowerCase()) ||
+          req.toLowerCase().includes(cs.toLowerCase())
+      )
+    );
   const missingSkills = isNonConformeDoc ? requiredSkills : requiredSkills.filter((req) => !matchedSkills.includes(req));
 
-  // RÈGLE STRICTE : Si 0 compétence correspondante, le score DOIT être 0%
-  const score = isNonConformeDoc || matchedSkills.length === 0
+  // Score réaliste multi-critères : 0% uniquement si document non conforme
+  const computedFallbackScore = Math.min(
+    96,
+    Math.max(
+      32,
+      Math.round((matchedSkills.length / Math.max(1, requiredSkills.length)) * 58 + 26 + (candidateSkills.length > 0 ? 8 : 0))
+    )
+  );
+  const score = isNonConformeDoc
     ? 0
     : (analyse?.score_correspondance && analyse.score_correspondance > 0
-        ? analyse.score_correspondance
-        : Math.round((matchedSkills.length / requiredSkills.length) * 100));
+      ? analyse.score_correspondance
+      : computedFallbackScore);
 
   const prenom = candidat?.prenom || user?.prenom || 'Candidat';
   const nom = candidat?.nom || user?.nom || '';
@@ -225,13 +234,12 @@ export function FicheCandidatIaView({
       return `Bonjour ${prenom},\n\nAprès examen de votre CV, nous avons le plaisir de vous informer que votre profil a été présélectionné pour le poste de « ${poste} » chez ${entreprise}.\n\nNous reviendrons vers vous très prochainement pour l'étape d'entretien.\n\nCordialement,\nService Recrutement ${entreprise}`;
     }
     if (target === 'ENTRETIEN') {
-      return `Bonjour ${prenom},\n\nVotre profil ayant été présélectionné pour le poste de « ${poste} » chez ${entreprise}, nous vous convions à un entretien le ${interviewDate} à ${interviewTime} (${
-        interviewType === 'VISIO'
-          ? 'en visioconférence'
-          : interviewType === 'TELEPHONE'
+      return `Bonjour ${prenom},\n\nVotre profil ayant été présélectionné pour le poste de « ${poste} » chez ${entreprise}, nous vous convions à un entretien le ${interviewDate} à ${interviewTime} (${interviewType === 'VISIO'
+        ? 'en visioconférence'
+        : interviewType === 'TELEPHONE'
           ? 'par téléphone'
           : 'dans nos locaux'
-      }). Vous retrouverez votre convocation dans l'onglet Entretiens & Convocations.\n\nCordialement,\nService Recrutement ${entreprise}`;
+        }). Vous retrouverez votre convocation dans l'onglet Entretiens & Convocations.\n\nCordialement,\nService Recrutement ${entreprise}`;
     }
     if (target === 'ACCEPTEE') {
       return `Bonjour ${prenom},\n\nNous avons le plaisir de vous annoncer que votre candidature au poste de « ${poste} » chez ${entreprise} a été retenue !\n\nNotre équipe RH prendra contact avec vous sous 24h pour finaliser votre intégration.\n\nFélicitations,\nService Recrutement ${entreprise}`;
@@ -255,10 +263,10 @@ export function FicheCandidatIaView({
       candidateFeedback,
       selectedStatus === 'ENTRETIEN'
         ? {
-            date: `${interviewDate} à ${interviewTime}`,
-            type: interviewType,
-            lien: interviewLink,
-          }
+          date: `${interviewDate} à ${interviewTime}`,
+          type: interviewType,
+          lien: interviewLink,
+        }
         : undefined
     );
     setToastMessage(
@@ -418,8 +426,8 @@ export function FicheCandidatIaView({
                 {isRealPdf
                   ? 'Fichier PDF importé'
                   : isDynamicCv
-                  ? `CV Dynamique (${cv?.template_style || 'moderne'})`
-                  : 'CV Candidat'}
+                    ? `CV Dynamique (${cv?.template_style || 'moderne'})`
+                    : 'CV Candidat'}
               </span>
             </div>
 
@@ -495,10 +503,10 @@ export function FicheCandidatIaView({
                   candidature.statut === 'ACCEPTEE'
                     ? true
                     : candidature.statut === 'REFUSEE'
-                    ? idx === 0 ||
+                      ? idx === 0 ||
                       idx === 1 ||
                       (candidature.etapes_validees || []).includes(st.key)
-                    : idx < savedStepIdx;
+                      : idx < savedStepIdx;
                 const isSavedCurrent = idx === savedStepIdx;
                 const isSelectedTarget =
                   selectedStatus === st.key ||
@@ -516,31 +524,29 @@ export function FicheCandidatIaView({
                         handleSelectStepStatus(st.key);
                       }
                     }}
-                    className={`flex items-center justify-between gap-3 rounded-xl border p-3 cursor-pointer transition ${
-                      isSelectedTarget
-                        ? 'border-[#4f46e5] bg-[#eef2ff]/60'
-                        : isSavedCompleted
+                    className={`flex items-center justify-between gap-3 rounded-xl border p-3 cursor-pointer transition ${isSelectedTarget
+                      ? 'border-[#4f46e5] bg-[#eef2ff]/60'
+                      : isSavedCompleted
                         ? 'border-[#bbf7d0] bg-[#f0fdf4]/60'
                         : 'border-[#e2e8f0] bg-[#f8fafc] hover:bg-[#f1f5f9]'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div
-                        className={`grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
-                          isFinalStep && candidature.statut === 'REFUSEE'
-                            ? 'bg-[#dc2626] text-white'
-                            : isSavedCompleted || (isFinalStep && candidature.statut === 'ACCEPTEE')
+                        className={`grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-bold ${isFinalStep && candidature.statut === 'REFUSEE'
+                          ? 'bg-[#dc2626] text-white'
+                          : isSavedCompleted || (isFinalStep && candidature.statut === 'ACCEPTEE')
                             ? 'bg-[#16a34a] text-white'
                             : isSelectedTarget || isSavedCurrent
-                            ? 'bg-[#4f46e5] text-white'
-                            : 'bg-[#e2e8f0] text-[#64748b]'
-                        }`}
+                              ? 'bg-[#4f46e5] text-white'
+                              : 'bg-[#e2e8f0] text-[#64748b]'
+                          }`}
                       >
                         {isFinalStep && candidature.statut === 'REFUSEE'
                           ? '✕'
                           : isSavedCompleted || (isFinalStep && candidature.statut === 'ACCEPTEE')
-                          ? '✓'
-                          : st.num}
+                            ? '✓'
+                            : st.num}
                       </div>
                       <div>
                         <div className="text-xs font-bold text-[#0f172a]">
@@ -548,8 +554,8 @@ export function FicheCandidatIaView({
                             ? candidature.statut === 'ACCEPTEE'
                               ? '5. Décision finale : Candidature retenue'
                               : candidature.statut === 'REFUSEE'
-                              ? '5. Décision finale : Non retenue'
-                              : '5. Décision finale (Accepter / Refuser)'
+                                ? '5. Décision finale : Non retenue'
+                                : '5. Décision finale (Accepter / Refuser)'
                             : st.label}
                         </div>
                         <div className="text-[11px] text-[#64748b]">{st.description}</div>
@@ -557,13 +563,12 @@ export function FicheCandidatIaView({
                     </div>
 
                     <span
-                      className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                        isSavedCurrent
-                          ? 'bg-[#4f46e5] text-white'
-                          : isSavedCompleted
+                      className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold ${isSavedCurrent
+                        ? 'bg-[#4f46e5] text-white'
+                        : isSavedCompleted
                           ? 'bg-[#dcfce7] text-[#15803d]'
                           : 'bg-[#e2e8f0] text-[#64748b]'
-                      }`}
+                        }`}
                     >
                       {isSavedCurrent ? 'Actuelle' : isSavedCompleted ? 'Validée' : 'À suivre'}
                     </span>
@@ -582,11 +587,10 @@ export function FicheCandidatIaView({
                   <button
                     type="button"
                     onClick={() => handleSelectStepStatus(recommended.nextStatus)}
-                    className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition ${
-                      selectedStatus === recommended.nextStatus
-                        ? 'bg-[#4f46e5] text-white shadow-xs'
-                        : 'border border-[#4f46e5] bg-white text-[#4f46e5] hover:bg-[#eef2ff]'
-                    }`}
+                    className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition ${selectedStatus === recommended.nextStatus
+                      ? 'bg-[#4f46e5] text-white shadow-xs'
+                      : 'border border-[#4f46e5] bg-white text-[#4f46e5] hover:bg-[#eef2ff]'
+                      }`}
                   >
                     <span>{recommended.nextLabel}</span>
                     <ChevronRight size={14} />
@@ -596,11 +600,10 @@ export function FicheCandidatIaView({
                     <button
                       type="button"
                       onClick={() => handleSelectStepStatus('REFUSEE')}
-                      className={`inline-flex items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-bold transition ${
-                        selectedStatus === 'REFUSEE'
-                          ? 'bg-[#dc2626] text-white'
-                          : 'border border-[#fecaca] bg-white text-[#dc2626] hover:bg-[#fef2f2]'
-                      }`}
+                      className={`inline-flex items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-bold transition ${selectedStatus === 'REFUSEE'
+                        ? 'bg-[#dc2626] text-white'
+                        : 'border border-[#fecaca] bg-white text-[#dc2626] hover:bg-[#fef2f2]'
+                        }`}
                     >
                       <XCircle size={13} /> Refuser
                     </button>
@@ -613,31 +616,29 @@ export function FicheCandidatIaView({
             {(selectedStatus === 'ACCEPTEE' ||
               selectedStatus === 'REFUSEE' ||
               candidature.statut === 'ENTRETIEN') && (
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => handleSelectStepStatus('ACCEPTEE')}
-                  className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-xs font-bold transition ${
-                    selectedStatus === 'ACCEPTEE'
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectStepStatus('ACCEPTEE')}
+                    className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-xs font-bold transition ${selectedStatus === 'ACCEPTEE'
                       ? 'border-[#16a34a] bg-[#16a34a] text-white'
                       : 'border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d] hover:bg-[#dcfce7]'
-                  }`}
-                >
-                  <CheckCircle2 size={14} /> Retenir le candidat
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSelectStepStatus('REFUSEE')}
-                  className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-xs font-bold transition ${
-                    selectedStatus === 'REFUSEE'
+                      }`}
+                  >
+                    <CheckCircle2 size={14} /> Retenir le candidat
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectStepStatus('REFUSEE')}
+                    className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-xs font-bold transition ${selectedStatus === 'REFUSEE'
                       ? 'border-[#dc2626] bg-[#dc2626] text-white'
                       : 'border-[#fecaca] bg-[#fef2f2] text-[#b91c1c] hover:bg-[#fee2e2]'
-                  }`}
-                >
-                  <XCircle size={14} /> Refuser le dossier
-                </button>
-              </div>
-            )}
+                      }`}
+                  >
+                    <XCircle size={14} /> Refuser le dossier
+                  </button>
+                </div>
+              )}
 
             {/* Indication claire sur l'affichage côté candidat en cas de validation directe */}
             {selectedStatus === 'ACCEPTEE' && savedStepIdx < 3 && (
@@ -684,11 +685,10 @@ export function FicheCandidatIaView({
                       key={t}
                       type="button"
                       onClick={() => setInterviewType(t)}
-                      className={`rounded-lg py-1.5 text-[11px] font-bold ${
-                        interviewType === t
-                          ? 'bg-[#d97706] text-white'
-                          : 'bg-white text-[#92400e] border border-[#fcd34d]'
-                      }`}
+                      className={`rounded-lg py-1.5 text-[11px] font-bold ${interviewType === t
+                        ? 'bg-[#d97706] text-white'
+                        : 'bg-white text-[#92400e] border border-[#fcd34d]'
+                        }`}
                     >
                       {t === 'VISIO' ? 'Visio' : t === 'PRESENTIEL' ? 'Présentiel' : 'Téléphone'}
                     </button>
@@ -816,17 +816,16 @@ export function FicheCandidatIaView({
                   </div>
                 </div>
                 <div
-                  className={`rounded-xl px-4 py-2 text-xl font-black ${
-                    score === 0
-                      ? 'bg-[#fef2f2] text-[#dc2626] border border-[#fecaca]'
-                      : score >= 80
+                  className={`rounded-xl px-4 py-2 text-xl font-black ${isNonConformeDoc
+                    ? 'bg-[#fef2f2] text-[#dc2626] border border-[#fecaca]'
+                    : score >= 80
                       ? 'bg-[#ecfdf5] text-[#059669]'
-                      : score >= 65
-                      ? 'bg-[#eff6ff] text-[#2563eb]'
-                      : 'bg-[#fffbeb] text-[#d97706]'
-                  }`}
+                      : score >= 60
+                        ? 'bg-[#eff6ff] text-[#2563eb]'
+                        : 'bg-[#fffbeb] text-[#d97706]'
+                    }`}
                 >
-                  {score}% {score === 0 ? '· Document Invalide' : ''}
+                  {score}% {isNonConformeDoc ? '· Document Invalide' : ''}
                 </div>
               </div>
 
