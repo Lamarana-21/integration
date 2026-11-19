@@ -12,10 +12,11 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { Entreprise } from '@/lib/types';
+import { Entreprise, Offre } from '@/lib/types';
 
 interface AdminEntreprisesViewProps {
   entreprises: Entreprise[];
+  offres?: Offre[];
   onToggleStatus: (id: string) => void;
   onDeleteEntreprise?: (id: string) => void;
   onAddEntreprise: (data: Partial<Entreprise>) => void;
@@ -24,6 +25,7 @@ interface AdminEntreprisesViewProps {
 
 export function AdminEntreprisesView({
   entreprises,
+  offres = [],
   onToggleStatus,
   onDeleteEntreprise,
   onAddEntreprise,
@@ -93,7 +95,16 @@ export function AdminEntreprisesView({
             </tr>
           </thead>
           <tbody className="divide-y divide-[#f2f4f9]">
-            {entreprises.map((ent) => (
+            {entreprises.map((ent) => {
+              const activeJobsForEnt = offres.filter(
+                (o) =>
+                  (o.entreprise_id === ent.id || o.entreprise?.id === ent.id) &&
+                  o.statut === 'PUBLIEE' &&
+                  !o.supprimee
+              ).length;
+              const displayOffresCount = activeJobsForEnt > 0 ? activeJobsForEnt : (ent.offres_count ?? 0);
+
+              return (
               <tr key={ent.id} className="hover:bg-[#fafbfc] transition">
                 <td className="px-6 py-4">
                   <div className="font-extrabold text-[#171f33] text-sm flex items-center gap-2.5">
@@ -115,7 +126,7 @@ export function AdminEntreprisesView({
                   {ent.recruteurs_count || 1}
                 </td>
                 <td className="px-6 py-4 font-bold text-[#594be0]">
-                  {ent.offres_count || 0}
+                  {displayOffresCount}
                 </td>
                 <td className="px-6 py-4">
                   <span
@@ -150,7 +161,8 @@ export function AdminEntreprisesView({
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

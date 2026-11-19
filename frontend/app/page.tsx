@@ -2906,6 +2906,7 @@ export default function AppRoot() {
           {activeScreen === 'E14' && currentUser && (
             <AdminEntreprisesView
               entreprises={entreprises}
+              offres={offres}
               onToggleStatus={async (entId) => {
                 const ent = entreprises.find((e) => e.id === entId);
                 if (!ent) return;

@@ -22,6 +22,9 @@ class EntrepriseController extends Controller
 
         $query = Entreprise::withCount([
             'recruteurs',
+            'offres as offres_count' => function ($q) {
+                $q->where('statut', 'PUBLIEE');
+            },
             'offres as offres_actives_count' => function ($q) {
                 $q->where('statut', 'PUBLIEE');
             }
