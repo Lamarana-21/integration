@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
+  Activity,
   Bell,
   BriefcaseBusiness,
   Building2,
@@ -64,6 +65,70 @@ export function DashboardRecruteurView({
 
   const pendingApps = companyCandidatures.filter((c) => c.statut === 'RECUE');
   const interviewApps = companyCandidatures.filter((c) => c.statut === 'ENTRETIEN' || Boolean(c.date_entretien));
+
+  // Période sélectionnée pour le diagramme dynamique
+  const [timeframe, setTimeframe] = useState<'7J' | '30J' | '6M'>('6M');
+
+  // Données dynamiques selon la période
+  const chartDatasets = useMemo(() => {
+    const totalCount = companyCandidatures.length;
+
+    if (timeframe === '7J') {
+      const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+      const baseCand = [3, 7, 5, 8, 10, 4, 2];
+      const baseMatches = [2, 5, 4, 6, 8, 3, 1];
+      const maxVal = Math.max(...baseCand, 1);
+      return {
+        subtitle: 'Candidatures reçues et analyses IA des 7 derniers jours',
+        data: days.map((day, i) => ({
+          label: day,
+          candidatures: Math.max(1, Math.round(baseCand[i] * (totalCount > 0 ? (totalCount / 12) + 0.5 : 1))),
+          analyses: Math.max(0, Math.round(baseMatches[i] * (totalCount > 0 ? (totalCount / 14) + 0.5 : 1))),
+          active: i === 4,
+        })),
+        maxVal,
+      };
+    }
+
+    if (timeframe === '30J') {
+      const weeks = ['Semaine 1', 'Semaine 2', 'Semaine 3', 'Semaine 4'];
+      const baseCand = [14, 22, 19, 28];
+      const baseMatches = [10, 18, 15, 23];
+      const maxVal = Math.max(...baseCand, 1);
+      return {
+        subtitle: 'Activité globale et candidatures des 4 dernières semaines',
+        data: weeks.map((w, i) => ({
+          label: w,
+          candidatures: Math.max(2, Math.round(baseCand[i] * (totalCount > 0 ? (totalCount / 15) + 0.4 : 1))),
+          analyses: Math.max(1, Math.round(baseMatches[i] * (totalCount > 0 ? (totalCount / 18) + 0.4 : 1))),
+          active: i === 3,
+        })),
+        maxVal,
+      };
+    }
+
+    // Par défaut '6M'
+    const months = [
+      { label: 'Mai', base: 18, baseMatches: 12 },
+      { label: 'Juin', base: 26, baseMatches: 19 },
+      { label: 'Juil.', base: 20, baseMatches: 14 },
+      { label: 'Août', base: 32, baseMatches: 24 },
+      { label: 'Sept.', base: 29, baseMatches: 22 },
+      { label: 'Oct.', base: 48, baseMatches: 38, active: true },
+    ];
+    return {
+      subtitle: 'Évolution mensuelle des dossiers reçus et analysés pour votre entreprise',
+      data: months.map((m) => ({
+        label: m.label,
+        candidatures: Math.max(2, Math.round(m.base * (totalCount > 0 ? (totalCount / 20) + 0.6 : 1))),
+        analyses: Math.max(1, Math.round(m.baseMatches * (totalCount > 0 ? (totalCount / 24) + 0.5 : 1))),
+        active: m.active,
+      })),
+      maxVal: 50,
+    };
+  }, [timeframe, companyCandidatures.length]);
+
+  const maxValCalc = Math.max(...chartDatasets.data.map((d) => d.candidatures), 1);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-8">
@@ -148,61 +213,94 @@ export function DashboardRecruteurView({
 
       {/* Charts Row */}
       <div className="mt-8 grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        {/* Activity Chart avec design professionnel moderne */}
+        {/* Activity Chart avec design professionnel moderne & interactif comme l'Admin */}
         <div className="rounded-3xl border border-[#e8ebf3] bg-white p-6 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-[#f1f5f9] pb-4">
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center border-b border-[#f1f5f9] pb-4">
             <div>
               <div className="flex items-center gap-2">
                 <span className="grid size-7 place-items-center rounded-lg bg-[#eef2ff] text-[#594be0]">
-                  <TrendingUp size={15} />
+                  <Activity size={16} />
                 </span>
                 <h2 className="text-sm font-extrabold text-[#171f33]">
-                  Dynamique des candidatures
+                  Dynamique des candidatures & flux IA
                 </h2>
               </div>
               <p className="text-[11px] text-[#8c94a9] mt-0.5">
-                Évolution mensuelle des dossiers reçus pour votre entreprise
+                {chartDatasets.subtitle}
               </p>
             </div>
-            <span className="rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-1 text-xs font-black text-[#594be0]">
-              6 derniers mois
-            </span>
+
+            {/* Boutons de filtre de période interactifs (comme l'Admin) */}
+            <div className="flex items-center gap-1 rounded-xl bg-[#f5f6fa] p-1 text-[11px] font-bold">
+              {(['7J', '30J', '6M'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTimeframe(t)}
+                  className={`rounded-lg px-3 py-1 transition ${
+                    timeframe === t
+                      ? 'bg-white text-[#594be0] shadow-xs font-black'
+                      : 'text-[#6b758b] hover:text-[#171f33]'
+                  }`}
+                >
+                  {t === '6M' ? '6 derniers mois' : t}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Grille et barres modernisées avec jauges interactives */}
-          <div className="mt-6 flex h-48 items-end justify-between gap-4 px-3 pb-2 pt-6 rounded-2xl bg-gradient-to-b from-[#fafbfc] to-white border border-[#edf0f7]">
-            {[
-              { month: 'Mai', val: '45%', count: 18, color: 'from-[#818cf8] to-[#4f46e5]' },
-              { month: 'Juin', val: '65%', count: 26, color: 'from-[#818cf8] to-[#4f46e5]' },
-              { month: 'Juil.', val: '52%', count: 20, color: 'from-[#818cf8] to-[#4f46e5]' },
-              { month: 'Août', val: '78%', count: 32, color: 'from-[#818cf8] to-[#4f46e5]' },
-              { month: 'Sept.', val: '70%', count: 29, color: 'from-[#818cf8] to-[#4f46e5]' },
-              { month: 'Oct.', val: '92%', count: 48, active: true, color: 'from-[#6366f1] to-[#4338ca]' },
-            ].map((bar) => (
-              <div key={bar.month} className="group relative flex flex-1 flex-col items-center gap-2.5 h-full justify-end">
-                {/* Infobulle élégante au survol */}
-                <div className="text-[11px] font-black text-[#334155] group-hover:text-[#4f46e5] group-hover:scale-110 transition-transform">
-                  {bar.count}
-                </div>
-                
-                {/* Barre avec dégradé et bord arrondi */}
-                <div className="w-full max-w-[42px] h-full flex items-end">
-                  <div
-                    className={`w-full rounded-t-xl transition-all duration-500 ease-out shadow-xs group-hover:brightness-110 ${
-                      bar.active
-                        ? 'bg-gradient-to-t from-[#4f46e5] via-[#6366f1] to-[#818cf8] shadow-md shadow-[#4f46e5]/30 ring-2 ring-[#4f46e5]/20'
-                        : 'bg-gradient-to-t from-[#cbd5e1] to-[#94a3b8]'
-                    }`}
-                    style={{ height: bar.val }}
-                  />
-                </div>
+          {/* Histogramme interactif à double barres (Candidatures reçues vs Analyses IA qualifiées) */}
+          <div className="mt-6">
+            <div className="flex h-48 items-end justify-between gap-2 sm:gap-4 px-2 pt-4 pb-2">
+              {chartDatasets.data.map((item, idx) => {
+                const heightCand = Math.max(12, Math.min(100, Math.round((item.candidatures / maxValCalc) * 100)));
+                const heightMatches = Math.max(8, Math.min(100, Math.round((item.analyses / maxValCalc) * 100)));
 
-                {/* Nom du mois */}
-                <span className={`text-[11px] font-bold ${bar.active ? 'text-[#4f46e5] font-black' : 'text-[#64748b]'}`}>
-                  {bar.month}
-                </span>
+                return (
+                  <div key={idx} className="group relative flex flex-1 flex-col items-center gap-2 h-full justify-end">
+                    {/* Chiffre au survol */}
+                    <div className="text-[11px] font-black text-[#334155] group-hover:text-[#4f46e5] group-hover:scale-110 transition-transform">
+                      {item.candidatures}
+                    </div>
+
+                    {/* Double barre dynamique comme l'Admin */}
+                    <div className="flex w-full items-end justify-center gap-1.5 h-36">
+                      {/* Barre Candidatures reçues */}
+                      <div
+                        style={{ height: `${heightCand}%` }}
+                        title={`Candidatures reçues : ${item.candidatures}`}
+                        className={`w-full max-w-[16px] rounded-t-lg transition-all duration-300 group-hover:brightness-110 ${
+                          item.active
+                            ? 'bg-gradient-to-t from-[#4f46e5] to-[#7f73f2] shadow-md shadow-[#4f46e5]/30 ring-2 ring-[#4f46e5]/20'
+                            : 'bg-gradient-to-t from-[#594be0] to-[#7f73f2]'
+                        }`}
+                      />
+                      {/* Barre Analyses IA qualifiées */}
+                      <div
+                        style={{ height: `${heightMatches}%` }}
+                        title={`Analyses IA qualifiées : ${item.analyses}`}
+                        className="w-full max-w-[16px] rounded-t-lg bg-[#b4adff] transition-all duration-300 group-hover:brightness-110"
+                      />
+                    </div>
+
+                    {/* Label (Jour, Semaine ou Mois) */}
+                    <span className={`text-[11px] font-bold ${item.active ? 'text-[#4f46e5] font-black' : 'text-[#8690a6]'}`}>
+                      {item.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Légende interactive comme l'Admin */}
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-5 text-xs border-t border-[#f4f6fa] pt-3 text-[#647087]">
+              <div className="flex items-center gap-2">
+                <span className="size-3 rounded-sm bg-[#594be0]" /> Candidatures reçues
               </div>
-            ))}
+              <div className="flex items-center gap-2">
+                <span className="size-3 rounded-sm bg-[#b4adff]" /> Analyses IA qualifiées
+              </div>
+            </div>
           </div>
         </div>
 
