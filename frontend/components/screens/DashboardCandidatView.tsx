@@ -1,23 +1,17 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
-  Activity,
   ArrowRight,
   Briefcase,
-  Building2,
   Calendar,
-  CheckCircle2,
   ChevronRight,
   Clock,
-  Eye,
   FileCheck2,
-  FileText,
   Heart,
   MapPin,
   MessageSquare,
   Search,
-  Sparkles,
   TrendingUp,
 } from 'lucide-react';
 import { Candidat, Candidature, Conversation, Offre, User, isJobFavorited } from '@/lib/types';
@@ -95,65 +89,6 @@ export function DashboardCandidatView({
 
   const unreadMessagesCount = myConversations.reduce((acc, c) => acc + (c.non_lus_candidat || 0), 0);
 
-  // ── Période du diagramme interactif (7J, 30J, 6M) ──────────────────────
-  const [chartTimeframe, setChartTimeframe] = useState<'7J' | '30J' | '6M'>('6M');
-
-  // Données dynamiques selon la période sélectionnée
-  const chartDatasets = useMemo(() => {
-    const totalCount = myCandidatures.length;
-
-    if (chartTimeframe === '7J') {
-      const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-      const baseCand = [1, 2, 1, 3, 2, 1, 0];
-      const baseInterviews = [0, 1, 0, 1, 2, 0, 0];
-      return {
-        subtitle: 'Candidatures transmises et retours RH / entretiens des 7 derniers jours',
-        data: days.map((day, i) => ({
-          label: day,
-          candidatures: Math.max(0, Math.round(baseCand[i] * (totalCount > 0 ? (totalCount / 6) + 0.3 : 1))),
-          reponses: Math.max(0, Math.round(baseInterviews[i] * (totalCount > 0 ? (totalCount / 8) + 0.3 : 1))),
-          active: i === 3,
-        })),
-      };
-    }
-
-    if (chartTimeframe === '30J') {
-      const weeks = ['Semaine 1', 'Semaine 2', 'Semaine 3', 'Semaine 4'];
-      const baseCand = [2, 3, 1, 4];
-      const baseInterviews = [1, 2, 0, 2];
-      return {
-        subtitle: 'Activité globale et avancée de vos dossiers sur les 4 dernières semaines',
-        data: weeks.map((w, i) => ({
-          label: w,
-          candidatures: Math.max(1, Math.round(baseCand[i] * (totalCount > 0 ? (totalCount / 7) + 0.4 : 1))),
-          reponses: Math.max(0, Math.round(baseInterviews[i] * (totalCount > 0 ? (totalCount / 9) + 0.3 : 1))),
-          active: i === 3,
-        })),
-      };
-    }
-
-    // Par défaut '6M'
-    const months = [
-      { label: 'Mai', cand: 1, resp: 0 },
-      { label: 'Juin', cand: 2, resp: 1 },
-      { label: 'Juil.', cand: 1, resp: 1 },
-      { label: 'Août', cand: 3, resp: 2 },
-      { label: 'Sept.', cand: 2, resp: 1 },
-      { label: 'Oct.', cand: 6, resp: 3, active: true },
-    ];
-    return {
-      subtitle: 'Évolution mensuelle de vos candidatures déposées et retours des recruteurs',
-      data: months.map((m) => ({
-        label: m.label,
-        candidatures: Math.max(1, Math.round(m.cand * (totalCount > 0 ? (totalCount / 6) + 0.4 : 1))),
-        reponses: Math.max(0, Math.round(m.resp * (totalCount > 0 ? (totalCount / 8) + 0.3 : 1))),
-        active: m.active,
-      })),
-    };
-  }, [chartTimeframe, myCandidatures.length]);
-
-  const maxVal = Math.max(...chartDatasets.data.map((d) => d.candidatures), 1);
-
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-8 space-y-8 font-sans">
       {/* ══════════════════════════════════════════════════════════════════ */}
@@ -206,7 +141,7 @@ export function DashboardCandidatView({
                 </span>
                 <span className="flex items-center gap-1 font-medium">
                   <Clock size={13} className="text-[#9aa2b5]" />
-                  Disponibilité : <strong className="text-[#1a2233]">{dispoState.replace(/T.*Z$/, '')}</strong>
+                  Disponibilité : <strong className="text-[#1a2233]">{dispoState}</strong>
                 </span>
                 <span className="flex items-center gap-1 font-medium">
                   <Briefcase size={13} className="text-[#9aa2b5]" />
@@ -325,150 +260,7 @@ export function DashboardCandidatView({
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* 3. DIAGRAMME D'ACTIVITÉ DYNAMIQUE & FLUX (STYLE ADMIN MODERNE)     */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Colonne Gauche (2/3) : Diagramme interactif avec sélecteur */}
-        <div className="lg:col-span-2 rounded-3xl border border-[#e8ebf3] bg-white p-6 shadow-xs flex flex-col justify-between">
-          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center border-b border-[#f1f5f9] pb-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="grid size-7 place-items-center rounded-lg bg-[#eef2ff] text-[#594be0]">
-                  <Activity size={16} />
-                </span>
-                <h2 className="text-sm font-extrabold text-[#171f33]">
-                  Dynamique de vos candidatures & retours
-                </h2>
-              </div>
-              <p className="text-[11px] text-[#8c94a9] mt-0.5">
-                {chartDatasets.subtitle}
-              </p>
-            </div>
-
-            {/* Sélecteur de période dynamique comme l'Admin */}
-            <div className="flex items-center gap-1 rounded-xl bg-[#f5f6fa] p-1 text-[11px] font-bold">
-              {(['7J', '30J', '6M'] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setChartTimeframe(t)}
-                  className={`rounded-lg px-3 py-1 transition ${
-                    chartTimeframe === t
-                      ? 'bg-white text-[#594be0] shadow-xs font-black'
-                      : 'text-[#6b758b] hover:text-[#171f33]'
-                  }`}
-                >
-                  {t === '6M' ? '6 derniers mois' : t}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Histogramme interactif à double barres */}
-          <div className="mt-6">
-            <div className="flex h-48 items-end justify-between gap-2 sm:gap-4 px-2 pt-4 pb-2">
-              {chartDatasets.data.map((item, idx) => {
-                const heightCand = Math.max(14, Math.min(100, Math.round((item.candidatures / maxVal) * 100)));
-                const heightResp = Math.max(8, Math.min(100, Math.round((item.reponses / maxVal) * 100)));
-
-                return (
-                  <div key={idx} className="group relative flex flex-1 flex-col items-center gap-2 h-full justify-end">
-                    {/* Chiffre au survol */}
-                    <div className="text-[11px] font-black text-[#334155] group-hover:text-[#594be0] group-hover:scale-110 transition-transform">
-                      {item.candidatures}
-                    </div>
-
-                    {/* Double barre comme l'Admin */}
-                    <div className="flex w-full items-end justify-center gap-1.5 h-36">
-                      {/* Candidatures envoyées */}
-                      <div
-                        style={{ height: `${heightCand}%` }}
-                        title={`Candidatures envoyées : ${item.candidatures}`}
-                        className={`w-full max-w-[16px] rounded-t-lg transition-all duration-300 group-hover:brightness-110 ${
-                          item.active
-                            ? 'bg-gradient-to-t from-[#594be0] to-[#7f73f2] shadow-md shadow-[#594be0]/30 ring-2 ring-[#594be0]/20'
-                            : 'bg-gradient-to-t from-[#594be0] to-[#7f73f2]'
-                        }`}
-                      />
-                      {/* Retours RH & convocations */}
-                      <div
-                        style={{ height: `${heightResp}%` }}
-                        title={`Retours RH / convocations : ${item.reponses}`}
-                        className="w-full max-w-[16px] rounded-t-lg bg-[#b4adff] transition-all duration-300 group-hover:brightness-110"
-                      />
-                    </div>
-
-                    <span className={`text-[11px] font-bold ${item.active ? 'text-[#594be0] font-black' : 'text-[#8690a6]'}`}>
-                      {item.label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Légende */}
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-5 text-xs border-t border-[#f4f6fa] pt-3 text-[#647087]">
-              <div className="flex items-center gap-2">
-                <span className="size-3 rounded-sm bg-[#594be0]" /> Candidatures envoyées
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="size-3 rounded-sm bg-[#b4adff]" /> Retours RH & Entretiens
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Colonne Droite (1/3) : Synthèse d'impact & Taux de qualification */}
-        <div className="rounded-3xl border border-[#e8ebf3] bg-white p-6 shadow-xs flex flex-col justify-between space-y-5">
-          <div>
-            <div className="flex items-center justify-between border-b border-[#f1f5f9] pb-3">
-              <h2 className="text-sm font-extrabold text-[#171f33] flex items-center gap-2">
-                <Sparkles size={16} className="text-[#7c3aed]" /> Performance de profil
-              </h2>
-              <span className="rounded-full bg-[#f5f3ff] px-2.5 py-0.5 text-[10px] font-black text-[#7c3aed]">
-                IA Talenta
-              </span>
-            </div>
-            <p className="text-[11px] text-[#8c94a9] mt-1.5">
-              Évaluation automatique de l'attractivité de votre profil face aux offres ciblées.
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-gradient-to-br from-[#faf9fe] to-[#f3efff] p-4 border border-[#e9e3ff] text-center space-y-2">
-            <div className="text-3xl font-black text-[#594be0]">88%</div>
-            <div className="text-xs font-bold text-[#1e2538]">Taux de correspondance moyen</div>
-            <p className="text-[11px] text-[#78829c]">
-              Vos compétences techniques correspondent à {publishedJobs.length} opportunités actuellement actives.
-            </p>
-          </div>
-
-          <div className="space-y-3 pt-2">
-            <button
-              type="button"
-              onClick={() => onNavigateScreen('E6_CV')}
-              className="w-full flex items-center justify-between rounded-2xl border border-[#e2e5ee] bg-[#f8fafd] p-3 text-xs font-bold text-[#353e54] hover:border-[#594be0] hover:bg-white transition"
-            >
-              <span className="flex items-center gap-2">
-                <FileText size={15} className="text-[#594be0]" /> Mes CV en ligne
-              </span>
-              <ArrowRight size={13} className="text-[#8690a6]" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateScreen('E1')}
-              className="w-full flex items-center justify-between rounded-2xl border border-[#e2e5ee] bg-[#f8fafd] p-3 text-xs font-bold text-[#353e54] hover:border-[#594be0] hover:bg-white transition"
-            >
-              <span className="flex items-center gap-2">
-                <Briefcase size={15} className="text-[#594be0]" /> Consulter les nouvelles offres
-              </span>
-              <ArrowRight size={13} className="text-[#8690a6]" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* 4. PIPELINE D'AVANCEMENT GLOBAL DES DOSSIERS                      */}
+      {/* 3. PIPELINE D'AVANCEMENT GLOBAL DES DOSSIERS                      */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       <section className="rounded-3xl border border-[#e8ebf3] bg-white p-6 sm:p-7 shadow-xs space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[#f0f2f7] pb-4">
