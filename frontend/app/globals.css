@@ -162,29 +162,13 @@
   }
 }
 
-/* Réduire le badge d'indicateur Next.js dev à sa seule icône sans le texte "Insight" */
+/* Masquer complètement le badge/toast flottant Next.js Dev ("1 Insight", etc.) */
 nextjs-portal,
+[data-nextjs-dev-overlay],
 div[data-nextjs-toast-wrapper],
-[data-nextjs-dev-overlay] {
-  font-size: 0 !important;
-}
-
-nextjs-portal button,
-div[data-nextjs-toast-wrapper] button,
 [data-nextjs-toast] {
-  padding: 6px !important;
-  font-size: 0 !important;
-}
-
-nextjs-portal svg,
-div[data-nextjs-toast-wrapper] svg,
-[data-nextjs-toast] svg {
-  display: inline-block !important;
-}
-
-/* Masquer le texte "Insight" et la croix de fermeture */
-nextjs-portal span,
-div[data-nextjs-toast-wrapper] span:not(:has(svg)),
-[data-nextjs-toast] span {
   display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }

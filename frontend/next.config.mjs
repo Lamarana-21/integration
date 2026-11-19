@@ -14,11 +14,8 @@ const nextConfig = {
       },
     ],
   },
-  // Désactive ou configure l'indicateur de développement Next.js (Toast "N Insights")
-  devIndicators: {
-    appIsrStatus: false,
-    buildActivity: true,
-  },
+  // Désactive complètement le badge/toast flottant de développement Next.js ("1 Insight", etc.)
+  devIndicators: false,
   async rewrites() {
     return [
       {
