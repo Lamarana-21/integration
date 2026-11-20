@@ -96,7 +96,7 @@ class AiCvAnalysisService
      */
     protected function analyserAvecGemini(Cv $cv, ?Offre $offre): ?array
     {
-        $apiKey = env('GEMINI_API_KEY');
+        $apiKey = config('services.gemini.key') ?: env('GEMINI_API_KEY');
         if (empty($apiKey) || empty($cv->contenu_base64)) {
             return null;
         }

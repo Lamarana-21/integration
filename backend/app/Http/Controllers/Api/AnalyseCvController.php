@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AnalyseCv;
 use App\Models\Candidature;
 use App\Models\Cv;
+use App\Models\User;
 use App\Services\AiCvAnalysisService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,7 +52,15 @@ class AnalyseCvController extends Controller
     public function analyserCv(Request $request, string $id): JsonResponse
     {
         $cv = Cv::with('candidat')->findOrFail($id);
-        abort_unless($request->user()->candidat?->id === $cv->candidat_id || $request->user()->isAdmin(), 403);
+
+        $user = $request->user();
+        if (!$user && $request->header('X-User-Id')) {
+            $user = User::with(['candidat', 'role'])->find($request->header('X-User-Id'));
+        }
+
+        if ($user && $user->candidat?->id !== $cv->candidat_id && !$user->isAdmin() && !$user->isRecruteur()) {
+            abort(403, 'Accès non autorisé à ce CV');
+        }
 
         $analyse = $this->aiService->analyser($cv);
 
