@@ -24,8 +24,8 @@ class CandidatureService
         ?AiCvAnalysisService $aiService = null,
         ?NotificationService $notificationService = null
     ) {
-        $this->aiService = $aiService;
-        $this->notificationService = $notificationService;
+        $this->aiService = $aiService ?? app(AiCvAnalysisService::class);
+        $this->notificationService = $notificationService ?? app(NotificationService::class);
     }
 
     /**

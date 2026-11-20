@@ -479,13 +479,14 @@ export function NouvelleOffreView({
                               const nom = c.candidat?.nom || candUser?.nom || '';
                               const resolvedCv = resolveDepositedCv(c);
                               const cvNom = (resolvedCv?.nom_fichier || '').toLowerCase();
+                              const nonCvRegex = /(?:^|[\s_\-.])(tp|td|atelier|chapitre|cours|enonce|énoncé|devoir|facture|invoice|exercice|corrige|corrigé|sujet|releve|relevé|note|notes|compte[\s_\-.]*rendu|rapport|examen|partiel|syllabus|tutoriel|guide)\d*(?:$|[\s_\-.])/i;
+                              const resumeLower = (c.analyse?.resume || '').toLowerCase();
                               const isNonConforme =
-                                cvNom.includes('tp_') ||
-                                cvNom.includes('tp-') ||
-                                cvNom.includes('facture') ||
-                                cvNom.includes('enonce') ||
-                                cvNom.includes('devoir') ||
-                                Boolean(c.analyse?.resume && c.analyse.resume.toLowerCase().includes('document non conforme'));
+                                nonCvRegex.test(cvNom) ||
+                                resumeLower.includes('document non conforme') ||
+                                resumeLower.includes("n'est pas un curriculum") ||
+                                resumeLower.includes("n'est pas un cv") ||
+                                c.analyse?.score_correspondance === 0;
                               const reqSk = job.competences_requises || ['React', 'Node.js', 'SQL'];
                               const candSk = Array.from(
                                 new Set([
@@ -509,7 +510,7 @@ export function NouvelleOffreView({
                               );
                               const score = isNonConforme
                                 ? 0
-                                : (c.analyse?.score_correspondance && c.analyse.score_correspondance > 0
+                                : (typeof c.analyse?.score_correspondance === 'number'
                                     ? c.analyse.score_correspondance
                                     : fallbackScore);
 

@@ -866,13 +866,14 @@ export function CandidaturesOffreView({
                       resolvedCv?.nom_fichier?.includes('Dynamique'));
 
                   const cvNom = (resolvedCv?.nom_fichier || '').toLowerCase();
+                  const nonCvRegex = /(?:^|[\s_\-.])(tp|td|atelier|chapitre|cours|enonce|énoncé|devoir|facture|invoice|exercice|corrige|corrigé|sujet|releve|relevé|note|notes|compte[\s_\-.]*rendu|rapport|examen|partiel|syllabus|tutoriel|guide)\d*(?:$|[\s_\-.])/i;
+                  const resumeLower = (c.analyse?.resume || '').toLowerCase();
                   const isNonConforme =
-                    cvNom.includes('tp_') ||
-                    cvNom.includes('tp-') ||
-                    cvNom.includes('facture') ||
-                    cvNom.includes('enonce') ||
-                    cvNom.includes('devoir') ||
-                    Boolean(c.analyse?.resume && c.analyse.resume.toLowerCase().includes('document non conforme'));
+                    nonCvRegex.test(cvNom) ||
+                    resumeLower.includes('document non conforme') ||
+                    resumeLower.includes("n'est pas un curriculum") ||
+                    resumeLower.includes("n'est pas un cv") ||
+                    c.analyse?.score_correspondance === 0;
 
                   // Compétences vérifiées pour le score tableau
                   const rowReqSkills = c.offre?.competences_requises || ['React', 'Node.js', 'SQL'];
@@ -895,8 +896,7 @@ export function CandidaturesOffreView({
                       );
 
                   // Score réaliste :
-                  // - 0% uniquement si document non conforme (TP, énoncé, facture)
-                  // - Sinon score backend ou calcul multi-critères réaliste (parcours + compétences)
+                  // - 0% si document non conforme (TP, atelier, cours, relevé, facture) ou si le serveur a évalué 0%
                   const computedFallbackScore = Math.min(
                     96,
                     Math.max(
@@ -906,7 +906,7 @@ export function CandidaturesOffreView({
                   );
                   const score = isNonConforme
                     ? 0
-                    : (c.analyse?.score_correspondance && c.analyse.score_correspondance > 0
+                    : (typeof c.analyse?.score_correspondance === 'number'
                         ? c.analyse.score_correspondance
                         : computedFallbackScore);
 
@@ -1100,16 +1100,14 @@ export function CandidaturesOffreView({
       {aiModalCand && (() => {
         const resolvedCv = resolveDepositedCv(aiModalCand);
         const cvNom = (resolvedCv?.nom_fichier || '').toLowerCase();
+        const nonCvRegex = /(?:^|[\s_\-.])(tp|td|atelier|chapitre|cours|enonce|énoncé|devoir|facture|invoice|exercice|corrige|corrigé|sujet|releve|relevé|note|notes|compte[\s_\-.]*rendu|rapport|examen|partiel|syllabus|tutoriel|guide)\d*(?:$|[\s_\-.])/i;
+        const resumeLower = (aiModalCand.analyse?.resume || '').toLowerCase();
         const isNonConforme =
-          cvNom.includes('tp_') ||
-          cvNom.includes('tp-') ||
-          cvNom.includes('facture') ||
-          cvNom.includes('enonce') ||
-          cvNom.includes('devoir') ||
-          Boolean(
-            aiModalCand.analyse?.resume &&
-              aiModalCand.analyse.resume.toLowerCase().includes('document non conforme')
-          );
+          nonCvRegex.test(cvNom) ||
+          resumeLower.includes('document non conforme') ||
+          resumeLower.includes("n'est pas un curriculum") ||
+          resumeLower.includes("n'est pas un cv") ||
+          aiModalCand.analyse?.score_correspondance === 0;
 
         const reqSkills = aiModalCand.offre?.competences_requises || ['React', 'Node.js', 'SQL'];
         const candSkills = isNonConforme
@@ -1141,7 +1139,7 @@ export function CandidaturesOffreView({
         );
         const score = isNonConforme
           ? 0
-          : (aiModalCand.analyse?.score_correspondance && aiModalCand.analyse.score_correspondance > 0
+          : (typeof aiModalCand.analyse?.score_correspondance === 'number'
               ? aiModalCand.analyse.score_correspondance
               : computedFallbackScore);
 

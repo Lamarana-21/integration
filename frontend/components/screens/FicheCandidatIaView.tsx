@@ -154,15 +154,16 @@ export function FicheCandidatIaView({
 
   const requiredSkills = offre?.competences_requises || ['React', 'Node.js', 'SQL'];
 
-  // Si le document est manifestement un document non conforme (énoncé TP, devoir, facture ou mention explicite)
+  // Si le document est manifestement un document non conforme (énoncé TP, atelier, cours, devoir, facture ou mention explicite)
   const cvNom = (cv?.nom_fichier || '').toLowerCase();
+  const nonCvRegex = /(?:^|[\s_\-.])(tp|td|atelier|chapitre|cours|enonce|énoncé|devoir|facture|invoice|exercice|corrige|corrigé|sujet|releve|relevé|note|notes|compte[\s_\-.]*rendu|rapport|examen|partiel|syllabus|tutoriel|guide)\d*(?:$|[\s_\-.])/i;
+  const resumeLower = (analyse?.resume || '').toLowerCase();
   const isNonConformeDoc =
-    cvNom.includes('tp_') ||
-    cvNom.includes('tp-') ||
-    cvNom.includes('facture') ||
-    cvNom.includes('enonce') ||
-    cvNom.includes('devoir') ||
-    Boolean(analyse?.resume && analyse.resume.toLowerCase().includes('document non conforme'));
+    nonCvRegex.test(cvNom) ||
+    resumeLower.includes('document non conforme') ||
+    resumeLower.includes("n'est pas un curriculum") ||
+    resumeLower.includes("n'est pas un cv") ||
+    analyse?.score_correspondance === 0;
 
   const candidateSkills = isNonConformeDoc
     ? []
@@ -184,7 +185,7 @@ export function FicheCandidatIaView({
     );
   const missingSkills = isNonConformeDoc ? requiredSkills : requiredSkills.filter((req) => !matchedSkills.includes(req));
 
-  // Score réaliste multi-critères : 0% uniquement si document non conforme
+  // Score réaliste multi-critères : 0% si document non conforme ou score serveur = 0
   const computedFallbackScore = Math.min(
     96,
     Math.max(
@@ -194,7 +195,7 @@ export function FicheCandidatIaView({
   );
   const score = isNonConformeDoc
     ? 0
-    : (analyse?.score_correspondance && analyse.score_correspondance > 0
+    : (typeof analyse?.score_correspondance === 'number'
       ? analyse.score_correspondance
       : computedFallbackScore);
 

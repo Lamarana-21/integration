@@ -101,6 +101,29 @@ class AiCvAnalysisService
             return null;
         }
 
+        // Vérification rapide du nom de fichier avant même d'appeler Gemini (économie et rapidité si c'est clairement un TP/Cours/Facture)
+        $preCheck = $this->validerConformiteCv($cv, '');
+        if (!$preCheck['est_valide']) {
+            return [
+                'est_cv' => false,
+                'score' => 0,
+                'modele' => 'Gemini-3-Flash / ATS-Guard',
+                'resume' => "Document non conforme : " . $preCheck['motif'],
+                'points_forts' => [],
+                'points_manquants' => [
+                    "Document non reconnu comme un curriculum vitæ (score : 0%).",
+                    "Veuillez déposer un véritable CV contenant vos expériences, formations et compétences."
+                ],
+                'niveau_confiance' => 'FAIBLE',
+                'infos_extraites' => [
+                    'competences' => [],
+                    'experiences' => [],
+                    'formations' => [],
+                    'langues' => [],
+                ],
+            ];
+        }
+
         $base64 = $cv->contenu_base64;
         if (str_contains($base64, ',')) {
             $base64 = explode(',', $base64)[1];
@@ -189,23 +212,34 @@ PROMPT;
                             $estCv = (bool) $json['est_cv'];
                             $rawScore = (int) ($json['score'] ?? 0);
 
-                            // Si Gemini confirme que c'est un vrai CV, garantir un score réaliste (>= 22%)
+                            // Si ce n'est pas un CV -> Score 0% et mention claire "Document non conforme"
                             $finalScore = !$estCv ? 0 : max(22, min(98, $rawScore > 0 ? $rawScore : 62));
+                            $rawResume = $json['resume'] ?? 'Analyse IA effectuée avec succès.';
+                            $finalResume = !$estCv && !str_contains(strtolower($rawResume), 'document non conforme')
+                                ? "Document non conforme : " . $rawResume
+                                : $rawResume;
 
                             return [
                                 'est_cv' => $estCv,
                                 'score' => $finalScore,
                                 'modele' => $model,
-                                'resume' => $json['resume'] ?? 'Analyse IA effectuée avec succès.',
-                                'points_forts' => is_array($json['points_forts'] ?? null) ? $json['points_forts'] : [],
-                                'points_manquants' => is_array($json['points_manquants'] ?? null) ? $json['points_manquants'] : [],
+                                'resume' => $finalResume,
+                                'points_forts' => !$estCv ? [] : (is_array($json['points_forts'] ?? null) ? $json['points_forts'] : []),
+                                'points_manquants' => is_array($json['points_manquants'] ?? null) && count($json['points_manquants']) > 0
+                                    ? $json['points_manquants']
+                                    : (!$estCv ? ["Document non reconnu comme un curriculum vitæ (score : 0%).", "Veuillez déposer un véritable CV professionnel."] : []),
                                 'niveau_confiance' => !$estCv ? 'FAIBLE' : ($json['niveau_confiance'] ?? ($finalScore >= 75 ? 'ELEVE' : 'MOYEN')),
-                                'infos_extraites' => is_array($json['infos_extraites'] ?? null) ? $json['infos_extraites'] : [
+                                'infos_extraites' => !$estCv ? [
+                                    'competences' => [],
+                                    'experiences' => [],
+                                    'formations' => [],
+                                    'langues' => [],
+                                ] : (is_array($json['infos_extraites'] ?? null) ? $json['infos_extraites'] : [
                                     'competences' => [],
                                     'experiences' => [],
                                     'formations' => [],
                                     'langues' => ['Français'],
-                                ],
+                                ]),
                             ];
                         }
                     }
@@ -480,27 +514,25 @@ PROMPT;
      */
     protected function validerConformiteCv(Cv $cv, string $texte): array
     {
-        $nomFichier = strtolower($cv->nom_fichier ?? '');
+        $nomFichier = $this->normaliserTexte($cv->nom_fichier ?? '');
 
-        // 1. Rejet strict si le nom du fichier indique clairement un document scolaire/administratif et non un CV
-        $motsRejetNom = [
-            'tp_', 'tp-', 'tp.', 'enonce', 'énoncé', 'devoir', 'facture',
-            'invoice', 'exercice', 'corrige', 'corrigé', 'sujet_', 'cours_',
-        ];
-        foreach ($motsRejetNom as $motif) {
-            if (str_contains($nomFichier, $motif)) {
-                return [
-                    'est_valide' => false,
-                    'motif' => "Le nom du fichier (« {$cv->nom_fichier} ») correspond à un énoncé académique ou document administratif et non à un CV.",
-                ];
-            }
+        // 1. Rejet strict si le nom du fichier indique clairement un document scolaire/cours/administratif et non un CV
+        $motifsRejet = '/(?:^|[\s_\-\.])(tp|td|atelier|chapitre|cours|enonce|devoir|facture|invoice|exercice|corrige|sujet|releve|note|notes|compte[\s_\-\.]*rendu|rapport|examen|partiel|syllabus|tutoriel|guide)\d*(?:$|[\s_\-\.])/i';
+        if (preg_match($motifsRejet, $nomFichier)) {
+            return [
+                'est_valide' => false,
+                'motif' => "Le fichier déposé (« {$cv->nom_fichier} ») correspond à un support de cours, énoncé de TP/Atelier ou document administratif et non à un curriculum vitæ.",
+            ];
         }
 
-        // 2. Si le nom du fichier indique explicitement un CV (ex: CV_Nom.pdf, Resume.pdf), ou si le PDF est un vrai document PDF valide (> 1 Ko)
+        // 2. Vérifier le contenu textuel extrait
         $texteNorm = $this->normaliserTexte($texte);
 
-        // Vérifier si le contenu textuel extrait est un énoncé de TP ou de cours (ex: "Énoncé du TP", "Objectif du TP", "Travail demandé")
-        $marqueursEnonceTp = ['enonce du tp', 'travail a rendre', 'barème', 'bareme', 'exercice 1', 'exercice 2', 'objectif du tp'];
+        $marqueursEnonceTp = [
+            'enonce du tp', 'travail a rendre', 'bareme', 'exercice 1', 'exercice 2',
+            'objectif du tp', 'travaux pratiques', 'atelier ', 'chapitre ', 'active directory',
+            'compte rendu', 'releve de note', 'bulletin de notes', 'facture n',
+        ];
         $nbMarqueursTp = 0;
         foreach ($marqueursEnonceTp as $mTp) {
             if (str_contains($texteNorm, $mTp)) {
@@ -510,11 +542,28 @@ PROMPT;
         if ($nbMarqueursTp >= 2) {
             return [
                 'est_valide' => false,
-                'motif' => "Le contenu du document correspond à un énoncé de travaux pratiques ou d'examen.",
+                'motif' => "Le contenu du document correspond à un support de cours, travaux pratiques ou document non-CV.",
             ];
         }
 
-        // 3. Tous les autres PDF (même avec polices vectorielles/Canva où peu de texte brut est extractible en PHP) sont acceptés comme de vrais CV
+        // 3. Si le texte extrait ne contient aucun marqueur de CV et que le nom ne contient pas "cv" / "resume" / "profil" / "candidat"
+        $estNomCvExplicite = (bool) preg_match('/(cv|resume|curriculum|profil|candidat)/i', $nomFichier);
+        if (!$estNomCvExplicite && strlen($texteNorm) > 80) {
+            $marqueursCv = ['experience', 'formation', 'competence', 'diplome', 'stage', 'projet', 'langue', 'contact', 'telephone', 'email', 'linkedin', 'github', 'profil', 'education', 'skills'];
+            $nbMarqueursCv = 0;
+            foreach ($marqueursCv as $mCv) {
+                if (str_contains($texteNorm, $mCv)) {
+                    $nbMarqueursCv++;
+                }
+            }
+            if ($nbMarqueursCv < 2) {
+                return [
+                    'est_valide' => false,
+                    'motif' => "Le document « {$cv->nom_fichier} » ne comporte pas les rubriques essentielles d'un curriculum vitæ (expériences, formations, compétences).",
+                ];
+            }
+        }
+
         return [
             'est_valide' => true,
             'motif' => 'CV professionnel valide.',

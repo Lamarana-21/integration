@@ -1476,15 +1476,16 @@ export default function AppRoot() {
 
       const fileTextLower = extractedFileText.toLowerCase();
 
-      // Vérification de conformité CV : rejeter uniquement les énoncés de TP, devoirs, factures
+      // Vérification de conformité CV : rejeter tous les énoncés de TP, ateliers, chapitres, devoirs, relevés de notes, comptes rendus, factures
       const fileNameLower = file.name.toLowerCase();
+      const nonCvFileRegex = /(?:^|[\s_\-.])(tp|td|atelier|chapitre|cours|enonce|énoncé|devoir|facture|invoice|exercice|corrige|corrigé|sujet|releve|relevé|note|notes|compte[\s_\-.]*rendu|rapport|examen|partiel|syllabus|tutoriel|guide)\d*(?:$|[\s_\-.])/i;
       const isSuspectNonCv =
-        fileNameLower.includes('tp_') ||
-        fileNameLower.includes('tp-') ||
-        fileNameLower.includes('enonce') ||
-        fileNameLower.includes('devoir') ||
-        fileNameLower.includes('facture') ||
-        fileNameLower.includes('invoice') ||
+        nonCvFileRegex.test(fileNameLower) ||
+        fileTextLower.includes('travaux pratiques') ||
+        fileTextLower.includes('enonce du tp') ||
+        fileTextLower.includes('énoncé du tp') ||
+        fileTextLower.includes('travail a rendre') ||
+        fileTextLower.includes('compte rendu') ||
         file.size < 300;
 
       if (isSuspectNonCv) {
@@ -1976,13 +1977,13 @@ export default function AppRoot() {
         if (c.id === candId) {
           const cvNom = (c.cv?.nom_fichier || '').toLowerCase();
           const prevResume = (c.analyse?.resume || '').toLowerCase();
+          const nonCvFileRegex = /(?:^|[\s_\-.])(tp|td|atelier|chapitre|cours|enonce|énoncé|devoir|facture|invoice|exercice|corrige|corrigé|sujet|releve|relevé|note|notes|compte[\s_\-.]*rendu|rapport|examen|partiel|syllabus|tutoriel|guide)\d*(?:$|[\s_\-.])/i;
           const isNonConforme =
-            cvNom.includes('tp_') ||
-            cvNom.includes('tp-') ||
-            cvNom.includes('facture') ||
-            cvNom.includes('enonce') ||
-            cvNom.includes('devoir') ||
-            prevResume.includes('document non conforme');
+            nonCvFileRegex.test(cvNom) ||
+            prevResume.includes('document non conforme') ||
+            prevResume.includes("n'est pas un curriculum") ||
+            prevResume.includes("n'est pas un cv") ||
+            c.analyse?.score_correspondance === 0;
 
           if (isNonConforme) {
             const nonConformeAnalyse: import('@/lib/types').AnalyseCv = {
